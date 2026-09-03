@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Placeholder domain (mumslovelaundry.com, matching the contact email used
+     throughout the app) — replace with the real production domain once one
+     is registered. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://mumslovelaundry.com/</loc><priority>1.0</priority></url>
+  <url><loc>https://mumslovelaundry.com/about</loc><priority>0.7</priority></url>
+  <url><loc>https://mumslovelaundry.com/services</loc><priority>0.8</priority></url>
+  <url><loc>https://mumslovelaundry.com/pricing</loc><priority>0.8</priority></url>
+  <url><loc>https://mumslovelaundry.com/blog</loc><priority>0.5</priority></url>
+  <url><loc>https://mumslovelaundry.com/contact</loc><priority>0.6</priority></url>
+  <url><loc>https://mumslovelaundry.com/privacy</loc><priority>0.2</priority></url>
+  <url><loc>https://mumslovelaundry.com/terms</loc><priority>0.2</priority></url>
+  <url><loc>https://mumslovelaundry.com/login</loc><priority>0.4</priority></url>
+  <url><loc>https://mumslovelaundry.com/register</loc><priority>0.4</priority></url>
+</urlset>

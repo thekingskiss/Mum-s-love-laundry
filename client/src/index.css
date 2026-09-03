@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+@layer base {
+  /* Tailwind's preflight makes inputs/selects/textareas inherit `color`,
+     so any that don't set their own dark: text color pick up the
+     app-wide dark:text-slate-100 default while keeping their native
+     white background — invisible text. Give them a dark fallback; it
+     loses to any element's own dark:text-white (e.g. paired with
+     dark:bg-slate-900) since two-class utility selectors outrank this
+     single-class-plus-tag one regardless of source order. */
+  .dark input,
+  .dark select,
+  .dark textarea {
+    color: theme('colors.ink.900');
+  }
+}
+
+@media print {
+  header,
+  footer {
+    display: none !important;
+  }
+}

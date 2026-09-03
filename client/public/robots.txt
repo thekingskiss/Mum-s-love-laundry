@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /staff
+Disallow: /settings
+Disallow: /book
+Disallow: /reset-password
+
+Sitemap: /sitemap.xml
