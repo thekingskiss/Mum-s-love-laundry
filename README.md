@@ -32,7 +32,7 @@ layered on top of the customer-facing app.
 
 ## Setup
 
-1. **Prerequisite**: use Node.js 18 or later.
+1. **Prerequisite**: use Node.js 20 or later.
 2. **Database**: choose local PostgreSQL or Supabase PostgreSQL. Never commit
    `server/.env` or share database credentials. For Supabase, create a project
    and copy its PostgreSQL URI from **Project Settings -> Database -> Connection
