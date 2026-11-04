@@ -1,4 +1,29 @@
 const pool = require('../config/db');
+const { notifyUser } = require('../services/notify');
+const { DIFFERENT_BRANCH_ERROR, canAccessBranch } = require('../utils/branchAccess');
+
+// Sends once, when an adjustment takes an item from above its reorder threshold
+// to at or below it. Goes to that branch's administrators and every super_admin;
+// each person's low_stock_alerts setting is applied inside notifyUser.
+async function sendLowStockAlert(item, branchId) {
+  const admins = await pool.query(
+    `SELECT id, email, phone_number FROM users
+     WHERE role = 'super_admin' OR (role = 'administrator' AND branch_id = $1)`,
+    [branchId]
+  );
+  const body = `${item.name} is low: ${Number(item.quantity_on_hand)} ${item.unit} left (reorder at ${Number(item.reorder_threshold)}).`;
+  await Promise.all(
+    admins.rows.map((admin) =>
+      notifyUser(admin.id, {
+        type: 'low_stock',
+        title: 'Low Stock Alert',
+        body,
+        email: admin.email,
+        phone: admin.phone_number,
+      }).catch((err) => console.error('[notify] failed:', err.message))
+    )
+  );
+}
 
 // All items, including inactive ones — Staff -> Inventory needs to see
 // everything to manage it. `low_stock` flags anything at or below its
@@ -84,6 +109,14 @@ async function updateInventoryItem(req, res, next) {
       return res.status(400).json({ error: 'No valid fields provided to update.' });
     }
 
+    const current = await pool.query('SELECT branch_id FROM inventory_items WHERE id = $1', [id]);
+    if (current.rows.length === 0) {
+      return res.status(404).json({ error: 'Inventory item not found.' });
+    }
+    if (!canAccessBranch(req.user, current.rows[0].branch_id)) {
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
+    }
+
     updates.push('updated_at = CURRENT_TIMESTAMP');
     params.push(id);
     const result = await pool.query(
@@ -115,13 +148,22 @@ async function adjustStock(req, res, next) {
 
     await client.query('BEGIN');
 
-    const current = await client.query('SELECT quantity_on_hand FROM inventory_items WHERE id = $1 FOR UPDATE', [id]);
+    const current = await client.query(
+      'SELECT quantity_on_hand, reorder_threshold, branch_id FROM inventory_items WHERE id = $1 FOR UPDATE',
+      [id]
+    );
     if (current.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Inventory item not found.' });
     }
+    if (!canAccessBranch(req.user, current.rows[0].branch_id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
+    }
 
-    const newQuantity = Number(current.rows[0].quantity_on_hand) + delta;
+    const previousQuantity = Number(current.rows[0].quantity_on_hand);
+    const threshold = Number(current.rows[0].reorder_threshold);
+    const newQuantity = previousQuantity + delta;
     if (newQuantity < 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'That adjustment would take stock below zero.' });
@@ -139,6 +181,13 @@ async function adjustStock(req, res, next) {
     );
 
     await client.query('COMMIT');
+
+    if (previousQuantity > threshold && newQuantity <= threshold) {
+      sendLowStockAlert(result.rows[0], current.rows[0].branch_id).catch((err) =>
+        console.error('[notify] low-stock alert failed:', err.message)
+      );
+    }
+
     res.json({ item: result.rows[0] });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -151,6 +200,14 @@ async function adjustStock(req, res, next) {
 async function listInventoryTransactions(req, res, next) {
   try {
     const { id } = req.params;
+    const item = await pool.query('SELECT branch_id FROM inventory_items WHERE id = $1', [id]);
+    if (item.rows.length === 0) {
+      return res.status(404).json({ error: 'Inventory item not found.' });
+    }
+    if (!canAccessBranch(req.user, item.rows[0].branch_id)) {
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
+    }
+
     const result = await pool.query(
       `SELECT t.id, t.change_qty, t.reason, t.created_at, u.full_name AS created_by_name
        FROM inventory_transactions t

@@ -6,6 +6,9 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
+    "worker": "node worker.js",
+    "avatars:migrate": "node migrate-avatars-to-cloudinary.js",
+    "db:migrate": "node db/migrate.js",
     "dev": "node --watch-path=./config --watch-path=./controllers --watch-path=./middleware --watch-path=./routes --watch-path=./services --watch-path=./utils --watch-path=server.js server.js",
     "test": "vitest run"
   },

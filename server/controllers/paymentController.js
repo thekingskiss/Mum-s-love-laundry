@@ -1,12 +1,14 @@
 const pool = require('../config/db');
 const { notifyUser } = require('../services/notify');
-const { isStaffRole } = require('../config/orderLifecycle');
+const { calculateLateFee } = require('../utils/lateFee');
+const { DIFFERENT_BRANCH_ERROR, canAccessBranch, canViewOrder } = require('../utils/branchAccess');
 
 const PAYMENT_METHODS = ['cash', 'mobile_money', 'bank_transfer', 'card', 'other'];
-const PAYMENT_TYPES = ['deposit', 'partial', 'balance', 'full', 'refund'];
+const PAYMENT_TYPES = ['deposit', 'partial', 'balance', 'full', 'refund', 'late_fee'];
 
-// Net amount paid so far on an order — refunds subtract instead of add.
-const NET_PAID_EXPR = `COALESCE(SUM(CASE WHEN payment_type = 'refund' THEN -amount ELSE amount END), 0)`;
+// Net amount paid so far towards an order's total — refunds subtract, and
+// storage-fee collections don't count because the fee sits outside total_price.
+const NET_PAID_EXPR = `COALESCE(SUM(CASE WHEN payment_type = 'refund' THEN -amount WHEN payment_type = 'late_fee' THEN 0 ELSE amount END), 0)`;
 
 async function recordPayment(req, res, next) {
   const client = await pool.connect();
@@ -29,8 +31,10 @@ async function recordPayment(req, res, next) {
     await client.query('BEGIN');
 
     const orderResult = await client.query(
-      `SELECT o.total_price, o.user_id, u.email, u.full_name, u.phone_number,
-              (SELECT string_agg(item_name || ' x' || quantity, ', ') FROM order_items WHERE order_id = o.id) AS items_summary
+      `SELECT o.total_price, o.user_id, o.branch_id, u.email, u.full_name, u.phone_number,
+              (SELECT string_agg(item_name || ' x' || quantity, ', ') FROM order_items WHERE order_id = o.id) AS items_summary,
+              (SELECT created_at FROM order_events WHERE order_id = o.id AND to_status = 'ready_for_pickup' ORDER BY created_at DESC LIMIT 1) AS ready_for_pickup_at,
+              (SELECT created_at FROM order_events WHERE order_id = o.id AND to_status = 'completed' ORDER BY created_at DESC LIMIT 1) AS completed_at
        FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = $1 FOR UPDATE`,
       [id]
     );
@@ -40,14 +44,30 @@ async function recordPayment(req, res, next) {
     }
     const order = orderResult.rows[0];
 
+    if (!canAccessBranch(req.user, order.branch_id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
+    }
+
     const netPaidResult = await client.query(
-      `SELECT ${NET_PAID_EXPR} AS net_paid FROM payments WHERE order_id = $1`,
+      `SELECT ${NET_PAID_EXPR} AS net_paid,
+              COALESCE(SUM(amount) FILTER (WHERE payment_type = 'late_fee'), 0) AS late_fee_paid
+       FROM payments WHERE order_id = $1`,
       [id]
     );
     const netPaid = Number(netPaidResult.rows[0].net_paid);
     const totalPrice = Number(order.total_price);
 
-    if (type === 'refund') {
+    if (type === 'late_fee') {
+      const { fee } = calculateLateFee(order.ready_for_pickup_at, order.completed_at || new Date());
+      const feeDue = Math.max(fee - Number(netPaidResult.rows[0].late_fee_paid), 0);
+      if (amountNum > feeDue + 0.005) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: `That amount exceeds the storage fee due of GHS ${feeDue.toFixed(2)}.`,
+        });
+      }
+    } else if (type === 'refund') {
       if (amountNum > netPaid + 0.005) {
         await client.query('ROLLBACK');
         return res.status(400).json({
@@ -71,9 +91,13 @@ async function recordPayment(req, res, next) {
 
     await client.query('COMMIT');
 
-    const newNetPaid = type === 'refund' ? netPaid - amountNum : netPaid + amountNum;
+    let newNetPaid = netPaid + amountNum;
+    if (type === 'refund') newNetPaid = netPaid - amountNum;
+    if (type === 'late_fee') newNetPaid = netPaid;
     const balance = Math.max(totalPrice - newNetPaid, 0);
-    const verb = type === 'refund' ? 'Refund issued' : 'Payment received';
+    let verb = 'Payment received';
+    if (type === 'refund') verb = 'Refund issued';
+    if (type === 'late_fee') verb = 'Storage fee received';
     notifyUser(order.user_id, {
       type: 'payment',
       title: verb,
@@ -95,11 +119,11 @@ async function recordPayment(req, res, next) {
 async function listOrderPayments(req, res, next) {
   try {
     const { id } = req.params;
-    const orderCheck = await pool.query('SELECT user_id, total_price FROM orders WHERE id = $1', [id]);
+    const orderCheck = await pool.query('SELECT user_id, branch_id, total_price FROM orders WHERE id = $1', [id]);
     if (orderCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Order not found.' });
     }
-    if (orderCheck.rows[0].user_id !== req.user.id && !isStaffRole(req.user.role)) {
+    if (!canViewOrder(req.user, orderCheck.rows[0])) {
       return res.status(403).json({ error: 'You do not have permission to view this order.' });
     }
 
@@ -113,7 +137,10 @@ async function listOrderPayments(req, res, next) {
       [id]
     );
 
-    const netPaid = result.rows.reduce((sum, p) => sum + (p.payment_type === 'refund' ? -Number(p.amount) : Number(p.amount)), 0);
+    const netPaid = result.rows.reduce((sum, p) => {
+      if (p.payment_type === 'late_fee') return sum;
+      return sum + (p.payment_type === 'refund' ? -Number(p.amount) : Number(p.amount));
+    }, 0);
     const balance = Math.max(Number(orderCheck.rows[0].total_price) - netPaid, 0);
 
     res.json({ payments: result.rows, amount_paid: netPaid, balance_due: balance });

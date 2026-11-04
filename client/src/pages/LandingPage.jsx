@@ -2,16 +2,18 @@ import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { motion } from 'framer-motion';
 import { Calendar, Clock, Heart, MapPin } from 'lucide-react';
+
 import SectionHeading from '../components/SectionHeading.jsx';
 import ScrollReveal from '../components/ScrollReveal.jsx';
 import { SHOP_ADDRESS, SHOP_HOURS } from '../lib/shopInfo.js';
 
-const MotionLink = motion(Link);
 import heroImage from '../assets/hero-laundry-woman.jpg';
 import heroBackground from '../assets/clean-clothes.jpg';
 import washingMachinesCloseup from '../assets/washing-machines-closeup.jpg';
 import foldedKnits from '../assets/folded-knits.jpg';
 import laundryBasket from '../assets/laundry-basket.jpg';
+
+const MotionLink = motion(Link);
 
 const REASONS = [
   {
@@ -40,81 +42,236 @@ export default function LandingPage() {
           name="description"
           content="Professional laundry, ironing, and dry cleaning in Akuapem-Akropong, Eastern Region, Ghana. Drop off your laundry and collect it fresh within 24–48 hours."
         />
-      </Helmet>
+       </Helmet>
+
       {/* Hero */}
-      <section className="relative overflow-hidden">
+      <section className="relative isolate overflow-hidden bg-ink-900">
         <img
           src={heroBackground}
-          alt="Attendant pulling freshly washed clothes from a washing machine"
-          className="absolute inset-0 h-full w-full object-cover object-[50%_15%]"
+          alt="Freshly cleaned and folded laundry"
+          className="absolute inset-0 h-full w-full object-cover object-center"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/50 to-black/70" />
 
-        <div className="relative mx-auto max-w-7xl px-6 py-24 md:py-32">
-          <div className="max-w-2xl">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-brand-200 backdrop-blur">
-              <Heart size={14} fill="currentColor" /> Serving the Eastern Region, Ghana
-            </span>
-            <h1 className="mt-6 font-display text-4xl font-semibold leading-tight text-white sm:text-5xl">
-              Fresh, Clean Laundry — Just Drop It Off
-            </h1>
-            <div className="mt-5 h-px w-24 bg-white/30" />
-            <p className="mt-5 text-sm font-semibold uppercase tracking-widest text-white/80">
-              Bring it in, we'll handle the rest — ready for you to collect
-            </p>
-            <div className="mt-8 flex flex-wrap gap-4">
-              <MotionLink
-                to="/book"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.96 }}
-                className="rounded-full bg-brand-500 px-8 py-3.5 text-xs font-bold uppercase tracking-widest text-white shadow-soft transition-colors hover:bg-brand-600"
-              >
-                Order Now
-              </MotionLink>
-              <Link
-                to="/services"
-                className="rounded-full border border-white/30 px-8 py-3.5 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-white/10"
-              >
-                View Services
-              </Link>
-            </div>
+        {/* Dark overlays for readability */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/65 to-black/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/20" />
+
+        <div className="relative mx-auto flex min-h-[620px] max-w-7xl items-center px-6 py-20 lg:min-h-[680px] lg:px-8">
+          <div className="grid w-full items-center gap-12 lg:grid-cols-[1.15fr_0.85fr]">
+
+            {/* Main hero content */}
+            <motion.div
+              initial={{ opacity: 0, y: 25 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, ease: 'easeOut' }}
+              className="max-w-2xl"
+            >
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-white backdrop-blur-md">
+                <Heart
+                  size={14}
+                  fill="currentColor"
+                  className="text-brand-300"
+                />
+                Serving Akuapem-Akropong
+              </span>
+
+              <h1 className="mt-7 font-display text-5xl font-semibold leading-[1.05] text-white sm:text-6xl lg:text-7xl">
+                Fresh clothes.
+                <span className="block text-brand-300">
+                  More time for you.
+                </span>
+              </h1>
+
+              <div className="mt-6 h-1 w-16 rounded-full bg-brand-500" />
+
+              <p className="mt-6 max-w-xl text-base leading-7 text-white/80 sm:text-lg">
+                Professional washing, ironing and dry-cleaning services.
+                Drop off your laundry and let Mum's Love take care of the rest.
+              </p>
+
+              <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+                <MotionLink
+                  to="/book"
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="inline-flex items-center justify-center rounded-full bg-brand-500 px-8 py-4 text-xs font-bold uppercase tracking-[0.16em] text-white shadow-xl transition-colors hover:bg-brand-600"
+                >
+                  Book a Drop-off
+                </MotionLink>
+
+                <Link
+                  to="/services"
+                  className="inline-flex items-center justify-center rounded-full border border-white/30 bg-white/5 px-8 py-4 text-xs font-bold uppercase tracking-[0.16em] text-white backdrop-blur-sm transition hover:bg-white/15"
+                >
+                  Explore Services
+                </Link>
+              </div>
+            </motion.div>
+
+            {/* Desktop information card */}
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{
+                duration: 0.7,
+                delay: 0.15,
+                ease: 'easeOut',
+              }}
+              className="hidden justify-end lg:flex"
+            >
+              <div className="w-full max-w-sm rounded-3xl border border-white/20 bg-white/10 p-6 text-white shadow-2xl backdrop-blur-xl">
+
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-200">
+                  Why choose Mum's Love?
+                </p>
+
+                <div className="mt-6 space-y-5">
+
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10">
+                      <Clock size={20} className="text-brand-200" />
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold">
+                        24–48 hour turnaround
+                      </h3>
+
+                      <p className="mt-1 text-sm leading-5 text-white/60">
+                        Get your freshly cleaned clothes back quickly.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10">
+                      <MapPin size={20} className="text-brand-200" />
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold">
+                        Convenient walk-in service
+                      </h3>
+
+                      <p className="mt-1 text-sm leading-5 text-white/60">
+                        Simply bring your laundry to our shop.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10">
+                      <Heart size={20} className="text-brand-200" />
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold">
+                        Care in every order
+                      </h3>
+
+                      <p className="mt-1 text-sm leading-5 text-white/60">
+                        Your clothes are handled with attention and care.
+                      </p>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="mt-7 border-t border-white/10 pt-5">
+                  <p className="text-xs leading-5 text-white/50">
+                    Serving customers in Akuapem-Akropong and the Eastern Region.
+                  </p>
+                </div>
+
+              </div>
+            </motion.div>
+
           </div>
         </div>
       </section>
 
       {/* Reasons to choose us */}
-      <section className="mx-auto max-w-7xl px-6 py-24 text-center">
-        <ScrollReveal>
-          <SectionHeading title="Clean Clothes and Total Peace of Mind" eyebrow="Reasons to Choose Us" />
+<section className="bg-slate-50 py-24 dark:bg-slate-900/60">
+  <div className="mx-auto max-w-7xl px-6 lg:px-8">
+
+    <ScrollReveal>
+      <SectionHeading
+        title="Laundry Care You Can Trust"
+        eyebrow="Why Mum's Love"
+      />
+
+      <p className="mx-auto mt-6 max-w-2xl text-center text-sm leading-7 text-slate-500 dark:text-slate-400 sm:text-base">
+        From washing and ironing to careful finishing, we make laundry
+        simple while giving your clothes the attention they deserve.
+      </p>
+    </ScrollReveal>
+
+    <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
+      {REASONS.map((r, i) => (
+        <ScrollReveal key={r.title} delay={i * 0.1}>
+          <motion.article
+            whileHover={{ y: -8 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+            className="group h-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl dark:border-slate-700 dark:bg-slate-800"
+          >
+            {/* Image */}
+            <div className="relative h-56 overflow-hidden">
+              <img
+                src={r.image}
+                alt={r.title}
+                className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+              />
+
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+
+              <div className="absolute bottom-4 left-5">
+                <span className="rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-brand-600 backdrop-blur-sm">
+                  0{i + 1}
+                </span>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-7">
+              <div className="mb-4 h-1 w-10 rounded-full bg-brand-500 transition-all duration-300 group-hover:w-16" />
+
+              <h3 className="font-display text-2xl text-ink-900 dark:text-white">
+                {r.title}
+              </h3>
+
+              <p className="mt-4 text-sm leading-7 text-slate-500 dark:text-slate-400">
+                {r.desc}
+              </p>
+
+              <Link
+                to="/services"
+                className="mt-6 inline-flex items-center text-xs font-bold uppercase tracking-widest text-brand-600 transition-colors hover:text-brand-700 dark:text-brand-400"
+              >
+                Explore our services
+                <span className="ml-2 transition-transform duration-300 group-hover:translate-x-1">
+                  →
+                </span>
+              </Link>
+            </div>
+          </motion.article>
         </ScrollReveal>
+      ))}
+    </div>
 
-        <div className="mt-12 grid grid-cols-1 gap-12 sm:grid-cols-3">
-          {REASONS.map((r, i) => (
-            <ScrollReveal key={r.title} delay={i * 0.1}>
-              <motion.div whileHover={{ y: -8 }} transition={{ duration: 0.3, ease: 'easeOut' }} className="group flex flex-col items-center">
-                <div className="relative h-44 w-44 overflow-hidden rounded-full shadow-soft ring-4 ring-brand-50 transition-all duration-300 group-hover:shadow-xl group-hover:ring-brand-300 dark:ring-brand-900/30 dark:group-hover:ring-brand-700">
-                  <img
-                    src={r.image}
-                    alt={r.title}
-                    className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
-                  />
-                  <div className="absolute inset-0 rounded-full bg-brand-500/0 transition-colors duration-300 group-hover:bg-brand-500/10" />
-                </div>
-                <h3 className="mt-6 font-display text-xl text-ink-900 dark:text-white">{r.title}</h3>
-                <div className="mt-3 h-px w-10 bg-brand-300 transition-all duration-300 group-hover:w-16 group-hover:bg-brand-500" />
-                <p className="mt-4 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{r.desc}</p>
-              </motion.div>
-            </ScrollReveal>
-          ))}
-        </div>
-
+    <ScrollReveal delay={0.2}>
+      <div className="mt-12 text-center">
         <Link
           to="/about"
-          className="mt-14 inline-block rounded-full bg-brand-500 px-8 py-3.5 text-xs font-bold uppercase tracking-widest text-white shadow-soft transition hover:bg-brand-600"
+          className="inline-flex items-center rounded-full border border-slate-300 bg-white px-7 py-3.5 text-xs font-bold uppercase tracking-widest text-ink-900 shadow-sm transition hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:hover:border-brand-500 dark:hover:text-brand-400"
         >
           More About Us
+          <span className="ml-2">→</span>
         </Link>
-      </section>
+      </div>
+    </ScrollReveal>
+
+  </div>
+</section>
 
       {/* Visit us */}
       <section className="relative overflow-hidden py-24">

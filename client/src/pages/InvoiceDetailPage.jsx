@@ -92,7 +92,7 @@ export default function InvoiceDetailPage() {
     try {
       const { data } = await api.post(`/admin/invoices/${id}/send`);
       navigator.clipboard?.writeText(data.link).catch(() => {});
-      toast.success('Invoice sent — pay link copied to your clipboard.');
+      toast.success(`${data.message} Pay link copied to your clipboard.`);
       load();
     } catch (err) {
       setError(err.response?.data?.error || 'Unable to send this invoice.');

@@ -9,8 +9,9 @@ const { runBalanceDueReminders } = require('../services/balanceDueReminders');
 const { runInvoiceReminders } = require('../services/invoiceReminders');
 const { sendBirthdayGreetings } = require('../services/birthdayGreetings');
 const { canTransition, getAllowedTransitions, STATUS_LABELS, STORAGE_LOCATIONS } = require('../config/orderLifecycle');
-const { insertOrder, isValidDateString } = require('./orderController');
+const { insertOrder, isValidDateString, autoInvoiceAfterOrder } = require('./orderController');
 const { generateUniqueUsername } = require('../utils/username');
+const { DIFFERENT_BRANCH_ERROR, canAccessBranch } = require('../utils/branchAccess');
 
 const SALT_ROUNDS = 12;
 
@@ -24,20 +25,32 @@ async function advanceOrderStatus(req, res, next) {
       return res.status(400).json({ error: 'status is required.' });
     }
 
+    // Hold the row lock across the transition check so two simultaneous
+    // requests can't both pass it and record the same move twice.
+    await client.query('BEGIN');
+
     const current = await client.query(
       `SELECT o.status, o.drop_off_date, o.branch_id, o.user_id, o.assigned_staff_id, u.email, u.full_name, u.phone_number,
               (SELECT string_agg(item_name || ' x' || quantity, ', ') FROM order_items WHERE order_id = o.id) AS items_summary
        FROM orders o
        JOIN users u ON u.id = o.user_id
-       WHERE o.id = $1`,
+       WHERE o.id = $1
+       FOR UPDATE OF o`,
       [id]
     );
     if (current.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Order not found.' });
     }
     const order = current.rows[0];
 
+    if (!canAccessBranch(req.user, order.branch_id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
+    }
+
     if (!canTransition(order.status, status, req.user.role)) {
+      await client.query('ROLLBACK');
       const allowed = getAllowedTransitions(order.status);
       return res.status(403).json({
         error: allowed.length
@@ -45,8 +58,6 @@ async function advanceOrderStatus(req, res, next) {
           : `Order is already in a terminal state ("${order.status}").`,
       });
     }
-
-    await client.query('BEGIN');
 
     const assignedStaffId = assign_to_me ? req.user.id : order.assigned_staff_id;
     const result = await client.query(
@@ -98,7 +109,7 @@ async function setPickupDate(req, res, next) {
     }
 
     const current = await pool.query(
-      `SELECT o.drop_off_date, o.user_id, u.email, u.full_name, u.phone_number,
+      `SELECT o.drop_off_date, o.user_id, o.branch_id, u.email, u.full_name, u.phone_number,
               (SELECT string_agg(item_name || ' x' || quantity, ', ') FROM order_items WHERE order_id = o.id) AS items_summary
        FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = $1`,
       [id]
@@ -107,6 +118,10 @@ async function setPickupDate(req, res, next) {
       return res.status(404).json({ error: 'Order not found.' });
     }
     const order = current.rows[0];
+
+    if (!canAccessBranch(req.user, order.branch_id)) {
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
+    }
 
     const dropOffDateStr = new Date(order.drop_off_date).toISOString().slice(0, 10);
     if (pickup_date < dropOffDateStr) {
@@ -143,6 +158,14 @@ async function setStorageLocation(req, res, next) {
 
     if (!STORAGE_LOCATIONS.includes(storage_location)) {
       return res.status(400).json({ error: `storage_location must be one of: ${STORAGE_LOCATIONS.join(', ')}.` });
+    }
+
+    const current = await pool.query('SELECT branch_id FROM orders WHERE id = $1', [id]);
+    if (current.rows.length === 0) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    if (!canAccessBranch(req.user, current.rows[0].branch_id)) {
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
     }
 
     const result = await pool.query(
@@ -295,7 +318,7 @@ async function createStaffOrder(req, res, next) {
     }
 
     const note = dropped_off_by ? `Dropped off by: ${dropped_off_by}` : null;
-    const { order, lineItems } = await insertOrder(client, {
+    const { order, lineItems, autoGenerateInvoice } = await insertOrder(client, {
       userId,
       branchId,
       dropOffDate: drop_off_date,
@@ -306,6 +329,10 @@ async function createStaffOrder(req, res, next) {
     });
 
     await client.query('COMMIT');
+
+    if (autoGenerateInvoice) {
+      await autoInvoiceAfterOrder(order.id, req.user.id);
+    }
 
     const customerResult = await pool.query('SELECT email, phone_number, full_name FROM users WHERE id = $1', [userId]);
     const customer = customerResult.rows[0];
@@ -336,7 +363,9 @@ async function createStaffOrder(req, res, next) {
 async function listCustomers(req, res, next) {
   try {
     const { search } = req.query;
-    const params = [];
+    // Customers aren't tied to a branch, but branch staff only see the order
+    // activity from their own branch. super_admin (null) sees all of it.
+    const params = [req.user.branch_id || null];
     let where = "WHERE u.role = 'customer'";
     if (search) {
       params.push(`%${search.trim()}%`);
@@ -354,7 +383,7 @@ async function listCustomers(req, res, next) {
          SELECT COUNT(*) AS order_count,
                 MAX(drop_off_date) AS last_drop_off_date,
                 COUNT(*) FILTER (WHERE status = 'ready_for_pickup') AS pending_pickup_count
-         FROM orders WHERE user_id = u.id
+         FROM orders WHERE user_id = u.id AND ($1::int IS NULL OR branch_id = $1::int)
        ) o ON true
        ${where}
        ORDER BY u.created_at DESC`,
@@ -399,12 +428,12 @@ async function getCustomerDetail(req, res, next) {
          FROM order_items WHERE order_id = o.id
        ) oi ON true
        LEFT JOIN LATERAL (
-         SELECT SUM(CASE WHEN payment_type = 'refund' THEN -amount ELSE amount END) AS amount_paid
+         SELECT SUM(CASE WHEN payment_type = 'refund' THEN -amount WHEN payment_type = 'late_fee' THEN 0 ELSE amount END) AS amount_paid
          FROM payments WHERE order_id = o.id
        ) pay ON true
-       WHERE o.user_id = $1
+       WHERE o.user_id = $1 AND ($2::int IS NULL OR o.branch_id = $2::int)
        ORDER BY o.created_at DESC`,
-      [id]
+      [id, req.user.branch_id || null]
     );
 
     const orders = ordersResult.rows.map((order) => {
@@ -440,7 +469,7 @@ async function getAnalytics(req, res, next) {
          (SELECT COALESCE(SUM(GREATEST(o.total_price - COALESCE(pay.amount_paid, 0), 0)), 0)
             FROM orders o
             LEFT JOIN LATERAL (
-              SELECT SUM(CASE WHEN payment_type = 'refund' THEN -amount ELSE amount END) AS amount_paid
+              SELECT SUM(CASE WHEN payment_type = 'refund' THEN -amount WHEN payment_type = 'late_fee' THEN 0 ELSE amount END) AS amount_paid
               FROM payments WHERE order_id = o.id
             ) pay ON true
             WHERE o.status != 'cancelled' ${branchId ? 'AND o.branch_id = $1' : ''}) AS outstanding_balance`,
