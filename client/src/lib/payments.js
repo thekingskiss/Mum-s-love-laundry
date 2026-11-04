@@ -12,6 +12,7 @@ export const PAYMENT_TYPES = [
   { value: 'balance', label: 'Balance Payment' },
   { value: 'full', label: 'Full Payment' },
   { value: 'refund', label: 'Refund' },
+  { value: 'late_fee', label: 'Storage Fee' },
 ];
 
 export const PAYMENT_METHOD_LABELS = Object.fromEntries(PAYMENT_METHODS.map((m) => [m.value, m.label]));
@@ -20,7 +21,7 @@ export const PAYMENT_TYPE_LABELS = Object.fromEntries(PAYMENT_TYPES.map((t) => [
 export const PAYMENT_STATUS_STYLES = {
   unpaid: 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400',
   partial: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
-  paid: 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400',
+  paid: 'border border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300',
 };
 
 export const PAYMENT_STATUS_LABELS = {

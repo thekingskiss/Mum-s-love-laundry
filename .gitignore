@@ -6,3 +6,4 @@ server/uploads/avatars/*
 !server/uploads/avatars/.gitkeep
 *.log
 .claude/
+Microsoft/

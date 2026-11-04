@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const pool = require('../config/db');
 const { notifyUser } = require('../services/notify');
-const { isStaffRole } = require('../config/orderLifecycle');
+const { canViewOrder } = require('../utils/branchAccess');
 const { NET_PAID_EXPR } = require('./paymentController');
 const paystack = require('../services/paystack');
 
@@ -33,7 +33,7 @@ async function initializePayment(req, res, next) {
     const type = CHARGE_PAYMENT_TYPES.includes(payment_type) ? payment_type : 'partial';
 
     const orderResult = await pool.query(
-      `SELECT o.id, o.total_price, o.user_id, u.email
+      `SELECT o.id, o.total_price, o.user_id, o.branch_id, u.email
        FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = $1`,
       [order_id]
     );
@@ -42,7 +42,7 @@ async function initializePayment(req, res, next) {
     }
     const order = orderResult.rows[0];
 
-    if (order.user_id !== req.user.id && !isStaffRole(req.user.role)) {
+    if (!canViewOrder(req.user, order)) {
       return res.status(403).json({ error: 'You do not have permission to pay for this order.' });
     }
 
@@ -164,8 +164,8 @@ async function verifyPayment(req, res, next) {
       return res.json({ status: result.status });
     }
 
-    const orderCheck = await pool.query('SELECT user_id FROM orders WHERE id = $1', [result.payment.order_id]);
-    if (orderCheck.rows.length > 0 && orderCheck.rows[0].user_id !== req.user.id && !isStaffRole(req.user.role)) {
+    const orderCheck = await pool.query('SELECT user_id, branch_id FROM orders WHERE id = $1', [result.payment.order_id]);
+    if (orderCheck.rows.length > 0 && !canViewOrder(req.user, orderCheck.rows[0])) {
       return res.status(403).json({ error: 'You do not have permission to view this payment.' });
     }
 

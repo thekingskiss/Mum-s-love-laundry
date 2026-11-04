@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { runWithJobLock } = require('./jobLock');
 const { notifyUser } = require('./notify');
 const { calculateLateFee, FREE_PICKUP_DAYS, LATE_FEE_PER_DAY } = require('../utils/lateFee');
 
@@ -12,7 +13,7 @@ function isReminderDue(daysReady) {
 // customer (email + SMS) if it matches the reminder schedule and hasn't
 // already been reminded today. Returns how many reminders were sent, for
 // logging/manual-trigger feedback.
-async function runPickupReminders() {
+async function runPickupRemindersUnlocked() {
   const result = await pool.query(
     `SELECT o.id, o.user_id, u.email, u.phone_number, u.full_name,
             (SELECT created_at FROM order_events WHERE order_id = o.id AND to_status = 'ready_for_pickup' ORDER BY created_at DESC LIMIT 1) AS ready_for_pickup_at,
@@ -47,6 +48,10 @@ async function runPickupReminders() {
   }
 
   return remindersSent;
+}
+
+async function runPickupReminders() {
+  return runWithJobLock('pickup-reminders', runPickupRemindersUnlocked);
 }
 
 module.exports = { runPickupReminders, isReminderDue };

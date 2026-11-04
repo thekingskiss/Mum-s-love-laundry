@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { runWithJobLock } = require('./jobLock');
 const { notifyUser } = require('./notify');
 const { NET_PAID_EXPR } = require('../controllers/paymentController');
 
@@ -16,10 +17,10 @@ function isInvoiceReminderDue(daysPastDue) {
 // page if it matches the reminder schedule and hasn't already been reminded
 // today. Returns how many reminders were sent, for logging/manual-trigger
 // feedback — same shape as runPickupReminders/runBalanceDueReminders.
-async function runInvoiceReminders() {
+async function runInvoiceRemindersUnlocked() {
   const result = await pool.query(
     `SELECT i.id, i.invoice_number, i.due_date, i.total_amount, i.public_token,
-            o.user_id, u.email, u.phone_number,
+            o.user_id, u.email, u.phone_number, u.invoice_notifications,
             COALESCE(pay.net_paid, 0) AS net_paid
      FROM invoices i
      JOIN orders o ON o.id = i.order_id
@@ -53,12 +54,21 @@ async function runInvoiceReminders() {
     await pool.query('UPDATE invoices SET last_reminder_sent_at = NOW() WHERE id = $1', [invoice.id]);
     await pool.query(
       `INSERT INTO invoice_activity (invoice_id, event_type, body) VALUES ($1, 'reminder_sent', $2)`,
-      [invoice.id, `Reminder sent to ${invoice.email || invoice.phone_number}.`]
+      [
+        invoice.id,
+        invoice.invoice_notifications === false
+          ? 'Reminder posted in the app only: customer has turned off invoice messages.'
+          : `Reminder sent to ${invoice.email || invoice.phone_number}.`,
+      ]
     );
     remindersSent += 1;
   }
 
   return remindersSent;
+}
+
+async function runInvoiceReminders() {
+  return runWithJobLock('invoice-reminders', runInvoiceRemindersUnlocked);
 }
 
 module.exports = { runInvoiceReminders, isInvoiceReminderDue };

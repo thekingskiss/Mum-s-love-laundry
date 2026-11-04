@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { outboundChannels } = require('../utils/notificationPrefs');
 
 let nodemailer;
 try {
@@ -49,7 +50,8 @@ async function sendSms(to, body) {
 
 // Always logs an in-app notification; also attempts email/SMS if the
 // recipient's contact info is provided (those channels only fire once
-// SMTP_* / TWILIO_* env vars are set — otherwise they log and no-op).
+// SMTP_* / TWILIO_* env vars are set — otherwise they log and no-op). Email and
+// SMS are skipped when the recipient has opted out of this notification type.
 async function notifyUser(userId, { type, title, body, email, phone }) {
   await pool.query(
     `INSERT INTO notifications (user_id, type, title, body, channel, sent_at)
@@ -57,7 +59,14 @@ async function notifyUser(userId, { type, title, body, email, phone }) {
     [userId, type, title, body]
   );
 
-  if (email) {
+  const prefsResult = await pool.query(
+    `SELECT email_order_updates, sms_order_updates, pickup_reminders, invoice_notifications, low_stock_alerts
+     FROM users WHERE id = $1`,
+    [userId]
+  );
+  const allowed = outboundChannels(type, prefsResult.rows[0]);
+
+  if (email && allowed.email) {
     const sent = await sendEmail(email, title, body);
     await pool.query(
       `INSERT INTO notifications (user_id, type, title, body, channel, sent_at)
@@ -66,7 +75,7 @@ async function notifyUser(userId, { type, title, body, email, phone }) {
     );
   }
 
-  if (phone) {
+  if (phone && allowed.sms) {
     const sent = await sendSms(phone, `${title}: ${body}`);
     await pool.query(
       `INSERT INTO notifications (user_id, type, title, body, channel, sent_at)

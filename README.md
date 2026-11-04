@@ -1,51 +1,68 @@
-# Mum's Love Laundry — Version 11.0
+# Mum's Love Laundry — Version 18.0
 
 Laundry order-tracking app for Mum's Love Laundry (Eastern Region, Ghana).
 **Walk-in drop-off model** — customers bring laundry in themselves and
-collect it in person; there is no pickup or delivery service. Local
-PostgreSQL + custom JWT auth, with a staff-facing operations system
+collect it in person; there is no pickup or delivery service. PostgreSQL
+(local or Supabase) + custom JWT auth, with a staff-facing operations system
 layered on top of the customer-facing app.
 
 ## Structure
 
 - `server/` — Express API (`/config`, `/middleware`, `/controllers`,
-  `/routes`, `/db`, `/services`, `/utils`). Connects to a local PostgreSQL
-  instance via `pg`, issues its own JWTs, hashes passwords with `bcryptjs`.
+  `/routes`, `/db`, `/services`, `/utils`). Connects to local PostgreSQL or
+  Supabase PostgreSQL via `pg`; it issues its own JWTs and hashes passwords
+  with `bcryptjs`.
 - `client/` — React + Vite single-page app styled with Tailwind CSS:
   a multi-page marketing site (Home/About/Services/Pricing/Blog/Contact),
   auth pages, a multi-step booking wizard (item cart + drop-off date), a
   customer dashboard, and a role-gated staff dashboard.
 - `supabase/schema.sql` — the deprecated v1.0 Supabase schema, kept for
   reference only.
-- `server/db/init.sql` — base schema, last folded up through v13 (Paystack).
-- `server/db/migrate_v3.sql` through `migrate_v16_branches.sql` —
-  incremental migrations already applied to this machine's database; kept
-  for reference / other environments. A fresh install needs `init.sql`
-  followed by every `migrate_v*.sql` file in numeric order (`init.sql` is
-  not re-folded on every change, so it no longer reflects the full current
-  schema on its own).
-- `server/uploads/avatars/` — local disk storage for uploaded profile
-  pictures, served at `/uploads/avatars/*`. Not checked into meaningful
-  version control beyond a `.gitkeep`.
+- server/db/init.sql — fresh-install schema baseline, folded through v13.
+- server/db/migrate.js — checksummed, version-tracked migration runner; the
+  fresh-install path applies v14–v18 after the v13 baseline.
+- `server/db/migrate_v14_balance_reminders.sql`, `migrate_v15_invoices.sql`,
+  `migrate_v16_branches.sql`, `migrate_v17_settings.sql`, and
+  `migrate_v18_late_fee_payments.sql` — schema changes after that baseline.
+  Do not replay the older v3–v13 migrations on top of `init.sql`; their
+  changes are already included.
+- server/uploads/avatars/ — local development storage for avatars; production
+  uploads use Cloudinary. The local directory also serves any legacy avatar
+  URLs until they are migrated.
 
 ## Setup
 
-1. **PostgreSQL**: this machine has PostgreSQL 16 at
-   `C:\Program Files\PostgreSQL\16`, superuser password `postgres` (see
-   `server/.env`). Fresh install:
-   ```
-   "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -h 127.0.0.1 -c "CREATE DATABASE mums_love_laundry;"
-   "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -h 127.0.0.1 -d mums_love_laundry -f server/db/init.sql
-   ```
-2. **Backend**:
+1. **Prerequisite**: use Node.js 20 or later.
+2. **Database**: choose local PostgreSQL or Supabase PostgreSQL. Never commit
+   `server/.env` or share database credentials. For Supabase, create a project
+   and copy its PostgreSQL URI from **Project Settings -> Database -> Connection
+   string**. Use the **Session pooler** URI for this long-running API and worker;
+   put it in `server/.env` as `DATABASE_URL`. TLS is enabled automatically.
+   This version keeps its existing PostgreSQL schema and custom JWT auth. Do
+   not use the deprecated `supabase/schema.sql` or the Supabase client-side
+   anon key.
+
+   For local PostgreSQL, create the empty database with your locally
+   configured PostgreSQL administrator credentials:
+   
+       "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres -h 127.0.0.1 -c "CREATE DATABASE mums_love_laundry;"
+   
+3. **Backend**:
    ```
    cd server
-   cp .env.example .env   # fill in DB_USER / DB_PASSWORD / JWT_SECRET
+   cp .env.example .env   # set DATABASE_URL or local DB settings, plus JWT_SECRET
    npm install
+   npm run db:migrate
    npm run dev
    ```
    Runs on `http://localhost:4000`.
-3. **Frontend**:
+
+   `npm run db:migrate` initializes an empty database and applies the tracked
+   schema changes. Changing the connection to Supabase does not copy records
+   from your local database; export and import existing data separately
+   before directing real users to the new database. Back up the local database
+   first, and do not baseline a newly created empty Supabase database.
+4. **Frontend**:
    ```
    cd client
    cp .env.example .env   # defaults to http://localhost:4000
@@ -53,6 +70,15 @@ layered on top of the customer-facing app.
    npm run dev
    ```
    Runs on `http://localhost:5173`.
+
+Start scheduled reminders in a separate server terminal with npm run worker.
+The worker runs the daily jobs from 9:00 to 9:15am in Africa/Accra.
+PostgreSQL advisory locks prevent overlapping worker or manual runs across instances.
+
+For an existing database created before migration tracking, confirm its schema
+and run npm run db:migrate -- --baseline=VERSION, where VERSION is the highest
+fully applied version from 13 through 17. The runner validates the baseline,
+then applies anything newer.
 
 ### Creating your first staff/admin account
 
@@ -75,7 +101,14 @@ another `administrator`.
 | `customer`        | Place orders, track them, cancel before processing starts.          |
 | `laundry_staff`   | Advance orders through washing/ironing/QC/ready stages; manage garment tags. |
 | `administrator`   | Everything staff can, plus manage staff/areas/pricing/capacity.     |
-| `super_admin`     | Everything an administrator can, plus create other administrators.  |
+| `super_admin`     | Everything an administrator can across all branches, plus create other administrators and manage branches. |
+
+`laundry_staff` and `administrator` accounts belong to one branch. The server
+applies that to single records as well as lists, so staff get a 403 on another
+branch's orders, payments, invoices, garment tags, inventory, and expenses. In
+the Customers directory they only see order activity from their own branch.
+A staff account with no branch assigned is denied those single-record actions;
+assign one instead of promoting a user straight to `administrator` in SQL.
 
 ## Pricing — Real Per-Item Price List
 
@@ -127,12 +160,13 @@ Every account (`/settings`) can manage:
 - **Username, full name, phone, area** — edited via `PATCH /api/auth/profile`.
   Usernames are auto-generated from the email at registration and are
   freely renameable afterwards (unique, 3–30 chars, letters/digits/`_`/`.`).
-- **Profile picture** — `POST /api/auth/profile/avatar` (multipart, JPEG/PNG/
-  WebP, max 2MB) stores the file locally under `server/uploads/avatars/` and
-  serves it back at `/uploads/avatars/<file>`. There's no cloud storage
-  configured — this is disk storage on whatever machine runs the API, so it
-  won't survive a redeploy to a different host without also moving that
-  folder (or swapping in S3/Cloudinary later).
+- **Profile picture** — POST /api/auth/profile/avatar accepts JPEG/PNG/WebP
+  up to 2MB and checks file signatures before storage. Development uses local
+  files under server/uploads/avatars/; production uploads to Cloudinary and
+  stores the returned HTTPS URL. Configure CLOUDINARY_CLOUD_NAME,
+  CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in server/.env before
+  enabling production avatar uploads. Before deploying existing local avatars,
+  run npm run avatars:migrate from the server directory with Cloudinary set up.
 - **Theme (light/dark)** — a real, working toggle (Tailwind `dark:` classes,
   `darkMode: 'class'`). Coverage is thorough on the navbar, footer, dashboard,
   and settings page; other pages inherit a sane dark background/text color
@@ -150,6 +184,23 @@ Every account (`/settings`) can manage:
   have someone fluent check them before customers see them. Extending
   translation to the rest of the site means adding more keys to that file.
 
+### Notification and account preferences
+
+These `/settings` switches are enforced on the server. In-app notifications are
+always written; the switches only control outbound email and SMS.
+
+| Setting | Effect |
+|---|---|
+| `email_order_updates`, `sms_order_updates` | Order status and pickup-date messages, per channel. |
+| `pickup_reminders` | The daily ready-for-pickup reminders. |
+| `invoice_notifications` | Invoice messages and invoice reminders. |
+| `low_stock_alerts` | The alert sent when an adjustment takes an item to or below its reorder threshold. It goes to that branch's administrators and all super admins. |
+| `birthday_discount_enabled` | Whether an order gets the 5% birthday discount. Birthday greetings leave out the offer when it's off. |
+| `auto_generate_invoice` | Creates an invoice as soon as an order is placed for this customer, including orders staff enter for them. |
+
+Payment confirmations, balance reminders, admin messages, and birthday greetings
+have no switch and are always sent.
+
 ## Admin Customer Directory
 
 Staff → **Customers** (any staff role, same access as the order queue) lists
@@ -161,9 +212,9 @@ just `status = 'completed'`).
 
 ## Payments
 
-There's no online payment gateway — this is a walk-in shop, so payment
-always happens in person (cash or Mobile Money), and staff record it as it
-happens. There's no rigid schedule: a customer can pay a deposit at
+Customers can pay in person, with staff recording cash/Mobile Money/etc., or
+use the optional Paystack online-payment flow. In-person payment has no
+rigid schedule: a customer can pay a deposit at
 drop-off and the balance whenever — before or after pickup — or pay the
 full amount at either end. The `payments` table is a straightforward
 ledger (amount, method, type, who recorded it, when); an order's
@@ -241,9 +292,13 @@ a running record an admin can add to and delete from.
 | GET    | `/api/orders/:id`                  | User/Staff  | Fetch one order with its line items.           |
 | GET    | `/api/orders/:id/history`          | User/Staff  | Status-change audit trail.                     |
 | POST   | `/api/orders/:id/cancel`           | User        | Customer self-cancel (order_received only).    |
+| POST   | `/api/orders/:id/receipt/send`     | User/Staff  | Email or text the receipt.                     |
+| GET    | `/api/orders/:id/invoice`          | User/Staff  | The order's active invoice.                    |
 | GET    | `/api/orders`                      | Staff       | Order queue, filterable by `status`/`mine`.    |
+| POST   | `/api/admin/orders`                | Staff       | Record a walk-in order for a customer.         |
 | PATCH  | `/api/admin/orders/:id`            | Staff       | Advance status (role-gated per transition).    |
 | PATCH  | `/api/admin/orders/:id/pickup-date`| Staff       | Assign/update when the order will be ready.    |
+| PATCH  | `/api/admin/orders/:id/storage-location` | Staff | Record where the order is stored.              |
 | GET/POST | `/api/orders/:orderId/garments`  | Staff       | List/tag garments for an order.                |
 | PATCH  | `/api/orders/garments/:id`         | Staff       | Update a garment tag's status/notes.           |
 | GET/POST | `/api/admin/staff`               | Admin       | List/create staff accounts.                    |
@@ -259,7 +314,7 @@ a running record an admin can add to and delete from.
 | GET    | `/api/admin/analytics`             | Admin       | Order volume; daily/monthly/yearly revenue, expenses &amp; net; status breakdown. |
 | POST   | `/api/admin/reminders/run`         | Admin       | Manually trigger the daily pickup-reminder sweep. |
 | GET    | `/api/orders/:id/payments`         | User/Staff  | An order's payment history (owner or staff only). |
-| POST   | `/api/admin/orders/:id/payments`   | Staff       | Record a payment (deposit/partial/balance/full/refund). |
+| POST   | `/api/admin/orders/:id/payments`   | Staff       | Record a payment (deposit/partial/balance/full/refund/late_fee). |
 | GET    | `/api/admin/payments`              | Admin       | Global transaction ledger, filterable by date/method/type. |
 | GET/POST | `/api/admin/inventory`           | Admin       | List / create laundry-essential inventory items. |
 | PATCH  | `/api/admin/inventory/:id`         | Admin       | Update an item's name/category/threshold/active state. |
@@ -267,6 +322,31 @@ a running record an admin can add to and delete from.
 | GET    | `/api/admin/inventory/:id/transactions` | Admin  | Stock-change history for one item.             |
 | GET/POST | `/api/admin/expenses`            | Admin       | List (filterable by date/category) / record an expense. |
 | DELETE | `/api/admin/expenses/:id`          | Admin       | Remove an incorrectly-entered expense.         |
+| POST   | `/api/admin/birthdays/run`         | Admin       | Manually trigger the birthday-greeting sweep.  |
+| POST   | `/api/admin/balance-reminders/run` | Admin       | Manually trigger the balance-reminder sweep.   |
+| POST   | `/api/admin/invoice-reminders/run` | Admin       | Manually trigger the invoice-reminder sweep.   |
+| POST   | `/api/admin/messages`              | Admin       | Message one customer or all customers.         |
+| POST   | `/api/paystack/initialize`         | User/Staff  | Start an online payment.                       |
+| GET    | `/api/paystack/verify/:reference`  | User/Staff  | Confirm an online payment after redirect.      |
+| POST   | `/api/paystack/webhook`            | Signature   | Paystack's payment confirmation callback.      |
+| GET    | `/api/branches`                    | User        | List branches.                                 |
+| GET/POST | `/api/admin/branches`            | Super admin | List/create branches.                          |
+| PATCH  | `/api/admin/branches/:id`          | Super admin | Update a branch.                               |
+| POST   | `/api/admin/orders/:id/invoice`    | Staff       | Generate an invoice from an order.             |
+| POST   | `/api/admin/invoices/bulk`         | Staff       | Generate invoices for several orders.          |
+| GET    | `/api/admin/invoices`              | Staff       | Invoice queue, filterable.                     |
+| PATCH  | `/api/admin/invoices/:id`          | Staff       | Update due date/notes.                         |
+| POST   | `/api/admin/invoices/:id/lines`    | Staff       | Add a discount, fee, or tax line.              |
+| DELETE | `/api/admin/invoices/:id/lines/:lineId` | Staff  | Remove an adjustment line.                     |
+| POST   | `/api/admin/invoices/:id/send`     | Staff       | Send the customer the invoice's pay link.      |
+| DELETE | `/api/admin/invoices/:id`          | Admin       | Void an invoice with no payments.              |
+| GET    | `/api/invoices/:id`                | User/Staff  | Fetch an invoice with its lines.               |
+| GET    | `/api/invoices/:id/pdf`            | User/Staff  | Download the invoice PDF.                      |
+| GET    | `/api/invoices/:id/activity`       | User/Staff  | Invoice activity history.                      |
+| POST   | `/api/invoices/:id/activity`       | Staff       | Add a note to the invoice history.             |
+| GET    | `/api/invoices/public/:token`      | Token       | View an invoice from its pay link, no login.   |
+| POST   | `/api/invoices/public/:token/pay`  | Token       | Start an online payment from the pay link.     |
+| GET    | `/api/invoices/public/:token/verify/:reference` | Token | Confirm a pay-link payment.          |
 
 ## Notifications
 
@@ -285,8 +365,12 @@ fee is computed live from `order_events` timestamps (frozen as of
 every order response — it is **not** added to `total_price`; staff collect
 it in person, same as the rest of this walk-in shop's payments.
 
-A daily cron job (`server/services/pickupReminders.js`, scheduled in
-`server.js` via `node-cron` at 9am) emails/texts customers whose orders are
+Staff record the money under Show payments with the **Storage Fee** type, up to
+the amount still due (`late_fee_due`). These `late_fee` payments count towards
+Total Collected in Staff → Payments, but they don't reduce `balance_due` or
+appear in Analytics revenue, which is based on order totals.
+
+The separate worker schedules this reminder for 9:00am in Africa/Accra and emails/texts customers whose orders are
 still `ready_for_pickup`: a gentle nudge on day 3, then a reminder with the
 accrued fee every 7 days once overdue. `POST /api/admin/reminders/run` fires
 the same sweep on demand. `orders.last_reminder_sent_at` prevents double-
@@ -336,10 +420,9 @@ Restore with:
 ```
 
 A daily dump (e.g. via Windows Task Scheduler) kept for at least 30 days is a
-reasonable starting point. Separately, `server/uploads/avatars/` is local
-disk storage and **is not covered by a database backup** — back that folder
-up on its own schedule, or move it to cloud storage (see the Roadmap) so it
-survives the machine it's running on.
+reasonable starting point. Development avatars in server/uploads/avatars/ are
+not covered by database backups; include that folder in local backups. Production
+avatars are stored in Cloudinary and are managed separately from PostgreSQL backups.
 
 ## Roadmap
 
@@ -371,17 +454,22 @@ survives the machine it's running on.
   alerts and an audit-logged stock-adjustment flow, an operating-expense
   ledger, and an explicit "not responsible for items after 7 days"
   liability clause on the Terms of Service and printable receipts.
-- **v11.0 (this repo)**: a payment ledger — deposits, balance/full
-  payments, and refunds, recordable before or after pickup, with live
-  balance-due and payment-status surfaced on every order across the
-  customer dashboard, staff order queue, admin Customers directory, and
-  printable receipts, plus a global transaction ledger and an Outstanding
-  Balance figure on Analytics.
-- **Future**: pickup/delivery and courier dispatch (if/when the business
-  adds that service), *automated* Mobile Money (MoMo) collection via
-  their API (today MoMo is just a payment method staff select when
-  recording a payment someone paid them directly — there's no live
-  charge/verification), loyalty tracking, full site translation beyond
-  nav/footer/settings, cloud storage for avatars, live FX rates for the
-  currency display, per-item cost-based inventory valuation (`unit_cost`
-  exists on inventory items but isn't surfaced anywhere yet).
+- **v11.0**: payment ledger — deposits, partial/full payments, and refunds,
+  with live balances across customer and staff views.
+- **v12.0**: birthday greetings and birthday-order discounts.
+- **v13.0**: optional Paystack online payments and order storage-location
+  tracking at the shop.
+- **v14.0**: reminders for orders with an outstanding balance, independent
+  of pickup reminders.
+- **v15.0**: invoices with frozen line items, adjustments, PDFs, public
+  payment links, activity history, and due-date reminders.
+- **v16.0**: multi-branch support, with branch assignment and branch-scoped
+  staff operations and records.
+- **v17.0**: account preferences for notification categories, birthday
+  discounts, and automatic invoice generation.
+- **v18.0 (current workspace)**: enforces those preferences and branch access
+  on single records, adds low-stock alerts, and records storage-fee payments.
+- **Future**: automated Mobile Money collection beyond the current Paystack
+  integration, loyalty tracking, full site translation beyond nav/footer/
+  settings, live FX rates for display currency, and per-item cost-based
+  inventory valuation (unit_cost exists but is not surfaced yet).

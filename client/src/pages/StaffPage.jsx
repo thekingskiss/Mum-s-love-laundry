@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -77,48 +77,95 @@ const TABS = [
 
 export default function StaffPage() {
   const { user } = useAuth();
-  const { branches, currentBranchId, setCurrentBranchId, isSuperAdmin } = useBranch();
+  const {
+    branches,
+    currentBranchId,
+    setCurrentBranchId,
+    isSuperAdmin,
+  } = useBranch();
+
   const isAdmin = ADMIN_ROLES.includes(user.role);
-  const [tab, setTab] = useState('orders');
 
-  const visibleTabs = TABS.filter((t) => (!t.adminOnly || isAdmin) && (!t.superAdminOnly || isSuperAdmin));
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  return (
-    <div className="mx-auto max-w-6xl px-6 pb-16 pt-10">
+  const urlTab = searchParams.get('tab');
+
+  const [tab, setTab] = useState(urlTab || 'orders');
+
+  const visibleTabs = TABS.filter(
+    (t) =>
+      (!t.adminOnly || isAdmin) &&
+      (!t.superAdminOnly || isSuperAdmin)
+  );
+
+  useEffect(() => {
+    const requestedTab = searchParams.get('tab');
+
+    if (!requestedTab) {
+      setTab('orders');
+      return;
+    }
+
+    const requestedTabConfig = TABS.find(
+      (item) => item.key === requestedTab
+    );
+
+    const canAccessTab =
+      requestedTabConfig &&
+      (!requestedTabConfig.adminOnly || isAdmin) &&
+      (!requestedTabConfig.superAdminOnly || isSuperAdmin);
+
+    if (canAccessTab) {
+      setTab(requestedTab);
+    } else {
+      setTab('orders');
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, isAdmin, isSuperAdmin, setSearchParams]);
+
+  function handleTabChange(nextTab) {
+    setTab(nextTab);
+    setSearchParams(
+      { tab: nextTab },
+      { replace: true }
+    );
+  }
+
+   return (
+    <div className="w-full px-4 pb-16 pt-6 sm:px-6 md:px-0 md:pt-2">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold text-ink-900 dark:text-white">Staff Dashboard</h1>
-          <p className="mt-2 text-slate-500 dark:text-slate-400">Signed in as {user.full_name} · {STAFF_ROLE_LABELS[user.role] || user.role}</p>
+          <h1 className="font-display text-3xl font-semibold text-ink-900">
+  Staff Dashboard
+</h1>
+
+          <p className="mt-2 text-slate-500 dark:text-slate-400">
+            Signed in as {user.full_name} {'\u00B7'}{' '}
+            {STAFF_ROLE_LABELS[user.role] || user.role}
+          </p>
         </div>
+
         {isSuperAdmin && branches.length > 0 && (
           <select
             value={currentBranchId}
-            onChange={(e) => setCurrentBranchId(e.target.value)}
+            onChange={(e) =>
+              setCurrentBranchId(e.target.value)
+            }
             title="Filter the Order Queue, Invoices, Payments, and Analytics tabs by branch"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-brand-400 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           >
             <option value="">All Branches</option>
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
           </select>
         )}
       </div>
 
-      <div className="mt-8 flex flex-col gap-6 md:flex-row md:gap-10">
-        <nav className="flex shrink-0 gap-1 overflow-x-auto md:w-56 md:flex-col md:overflow-visible md:border-r md:border-slate-200 md:pr-4 md:dark:border-slate-700">
-          {visibleTabs.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-left text-sm font-semibold transition md:w-full ${
-                tab === key
-                  ? 'bg-brand-50 text-brand-600 dark:bg-brand-900/30'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Icon size={16} /> {label}
-            </button>
-          ))}
-        </nav>
+      <div className="mt-8">
 
         <div className="min-w-0 flex-1">
           <AnimatePresence mode="wait">
@@ -127,22 +174,66 @@ export default function StaffPage() {
               initial={{ opacity: 0, x: 10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
+              transition={{
+                duration: 0.2,
+                ease: 'easeOut',
+              }}
             >
-              {tab === 'orders' && <OrderQueueTab user={user} />}
-              {tab === 'customers' && <CustomersTab />}
-              {tab === 'messages' && <MessagesTab isAdmin={isAdmin} />}
-              {tab === 'pickups' && isAdmin && <ScheduledPickupsTab />}
-              {tab === 'analytics' && isAdmin && <AnalyticsTab />}
-              {tab === 'payments' && isAdmin && <PaymentsTab />}
-              {tab === 'invoices' && <InvoicesTab />}
-              {tab === 'inventory' && isAdmin && <InventoryTab />}
-              {tab === 'expenses' && isAdmin && <ExpensesTab />}
-              {tab === 'staff' && isAdmin && <StaffTab user={user} />}
-              {tab === 'branches' && isSuperAdmin && <BranchesTab />}
-              {tab === 'zones' && isAdmin && <ZonesTab />}
-              {tab === 'pricing' && isAdmin && <PricingTab />}
-              {tab === 'capacity' && isAdmin && <CapacityTab />}
+              {tab === 'orders' && (
+                <OrderQueueTab user={user} />
+              )}
+
+              {tab === 'customers' && (
+                <CustomersTab />
+              )}
+
+              {tab === 'messages' && (
+                <MessagesTab isAdmin={isAdmin} />
+              )}
+
+              {tab === 'pickups' && isAdmin && (
+                <ScheduledPickupsTab />
+              )}
+
+              {tab === 'analytics' && isAdmin && (
+                <AnalyticsTab />
+              )}
+
+              {tab === 'payments' && isAdmin && (
+                <PaymentsTab />
+              )}
+
+              {tab === 'invoices' && (
+                <InvoicesTab />
+              )}
+
+              {tab === 'inventory' && isAdmin && (
+                <InventoryTab />
+              )}
+
+              {tab === 'expenses' && isAdmin && (
+                <ExpensesTab />
+              )}
+
+              {tab === 'staff' && isAdmin && (
+                <StaffTab user={user} />
+              )}
+
+              {tab === 'branches' && isSuperAdmin && (
+                <BranchesTab />
+              )}
+
+              {tab === 'zones' && isAdmin && (
+                <ZonesTab />
+              )}
+
+              {tab === 'pricing' && isAdmin && (
+                <PricingTab />
+              )}
+
+              {tab === 'capacity' && isAdmin && (
+                <CapacityTab />
+              )}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -794,6 +885,7 @@ function OrderQueueTab({ user }) {
                 >
                   <AlertTriangle size={14} /> {order.days_overdue} day{order.days_overdue === 1 ? '' : 's'} overdue —
                   GHS {order.late_fee.toFixed(2)} storage fee accrued
+                  {order.late_fee_paid > 0 && ` (GHS ${order.late_fee_due.toFixed(2)} still due)`}
                 </motion.div>
               )}
 
@@ -2200,154 +2292,561 @@ function AnalyticsTab() {
 
   useEffect(() => {
     setLoading(true);
+    setError('');
+
     api
-      .get('/admin/analytics', { params: { branch_id: currentBranchId || undefined } })
+      .get('/admin/analytics', {
+        params: { branch_id: currentBranchId || undefined },
+      })
       .then(({ data }) => setData(data))
       .catch(() => setError('Unable to load analytics.'))
       .finally(() => setLoading(false));
   }, [currentBranchId]);
 
-  if (loading) return <p className="text-sm text-slate-500 dark:text-slate-400">Loading analytics...</p>;
-  if (error) return <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>;
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-40 animate-pulse rounded-lg bg-slate-200" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div
+              key={index}
+              className="h-32 animate-pulse rounded-2xl border border-slate-200 bg-white"
+            />
+          ))}
+        </div>
+        <div className="h-72 animate-pulse rounded-2xl border border-slate-200 bg-white" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+        {error}
+      </p>
+    );
+  }
+
   if (!data) return null;
 
-  const trend = data[periodKey] || [];
-  const maxRevenue = Math.max(1, ...trend.map((d) => d.revenue));
+  const trend = Array.isArray(data[periodKey]) ? data[periodKey] : [];
 
-  return (
-    <div>
-      <h2 className="font-display text-lg text-ink-900 dark:text-white">Analytics</h2>
+const normalizedTrend = trend.map((item) => ({
+  ...item,
+  revenue: Number(item.revenue) || 0,
+  expenses: Number(item.expenses) || 0,
+  net: Number(item.net) || 0,
+  order_count: Number(item.order_count) || 0,
+}));
+
+const maxRevenue = Math.max(
+  1,
+  ...normalizedTrend.map((item) =>
+    Math.max(item.revenue, item.expenses)
+  )
+);
+
+  const totalStatusOrders = data.orders_by_status.reduce(
+    (sum, item) => sum + Number(item.count || 0),
+    0
+  );
+
+  const statusBarClasses = {
+    pending: 'bg-amber-400',
+    washing: 'bg-blue-400',
+    ready: 'bg-violet-400',
+    completed: 'bg-emerald-500',
+    cancelled: 'bg-slate-400',
+    picked_up: 'bg-emerald-600',
+  };
+
+ const statusLabels = {
+  pending: 'Pending',
+  order_received: 'Order Received',
+  washing: 'Washing',
+  in_washing: 'In Washing',
+  ready: 'Ready for Pickup',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  picked_up: 'Picked Up',
+};
+    return (
+  <div className="w-full">
+  <div className="w-full p-0">
+
+            {/* Page heading */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-5">
+
+        {/* Left side */}
+        <div>
+          {/* Breadcrumb */}
+          <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
+            <span className="text-slate-400">
+              Staff
+            </span>
+
+            <span className="text-slate-300">
+              /
+            </span>
+
+            <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-slate-600 shadow-sm">
+              Analytics
+            </span>
+          </div>
+
+          {/* Heading */}
+          <div className="flex items-center gap-3">
+            {/* Analytics icon */}
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-600 shadow-sm">
+              <BarChart3 size={22} />
+            </div>
+
+            <div>
+              <h2 className="font-display text-2xl font-semibold text-slate-900 sm:text-3xl">
+                Analytics
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Monitor sales, orders, expenses, and outstanding balances.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Live dashboard badge */}
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-emerald-700 shadow-sm">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          </span>
+
+          <span className="text-xs font-semibold">
+            Live dashboard
+          </span>
+        </div>
+
+      </div>
 
       {data.low_stock_count > 0 && (
-        <div className="mt-4 flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-          <AlertTriangle size={16} /> {data.low_stock_count} inventory item{data.low_stock_count === 1 ? ' is' : 's are'} running low — check Staff → Inventory.
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+              <AlertTriangle size={17} />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-amber-900">
+                {data.low_stock_count} inventory item
+                {data.low_stock_count === 1 ? ' is' : 's are'} running low
+              </p>
+              <p className="text-xs text-amber-700">
+                Review stock levels before they run out.
+              </p>
+            </div>
+          </div>
+
+          <a
+            href="/staff?tab=inventory"
+            className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 shadow-sm transition hover:bg-amber-100"
+          >
+            View inventory
+          </a>
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft dark:border-slate-700 dark:bg-slate-800"
-        >
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Total Orders</p>
-          <p className="mt-2 font-display text-3xl text-ink-900 dark:text-white">
-            <AnimatedNumber value={data.total_orders} />
-          </p>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft dark:border-slate-700 dark:bg-slate-800"
-        >
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Total Revenue</p>
-          <p className="mt-2 font-display text-3xl text-ink-900 dark:text-white">
-            <AnimatedNumber value={data.total_revenue} format={formatPrice} />
-          </p>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft dark:border-slate-700 dark:bg-slate-800"
-        >
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Total Expenses</p>
-          <p className="mt-2 font-display text-3xl text-ink-900 dark:text-white">
-            <AnimatedNumber value={data.total_expenses} format={formatPrice} />
-          </p>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft dark:border-slate-700 dark:bg-slate-800"
-        >
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Net Profit</p>
-          <p className={`mt-2 font-display text-3xl ${data.net_profit < 0 ? 'text-red-600' : 'text-ink-900 dark:text-white'}`}>
-            <AnimatedNumber value={data.net_profit} format={formatPrice} />
-          </p>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft dark:border-slate-700 dark:bg-slate-800"
-        >
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Outstanding Balance</p>
-          <p className={`mt-2 font-display text-3xl ${data.outstanding_balance > 0 ? 'text-amber-600' : 'text-ink-900 dark:text-white'}`}>
-            <AnimatedNumber value={data.outstanding_balance} format={formatPrice} />
-          </p>
-        </motion.div>
+      {/* KPI cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {[
+          {
+            label: 'Total Orders',
+            value: data.total_orders,
+            description: 'Orders recorded',
+            accent: 'text-slate-900',
+            format: undefined,
+          },
+          {
+            label: 'Total Revenue',
+            value: data.total_revenue,
+            description: 'Gross sales',
+            accent: 'text-slate-900',
+            format: formatPrice,
+          },
+          {
+            label: 'Total Expenses',
+            value: data.total_expenses,
+            description: 'Recorded expenses',
+            accent: 'text-slate-900',
+            format: formatPrice,
+          },
+          {
+            label: 'Net Profit',
+            value: data.net_profit,
+            description: 'Revenue minus expenses',
+            accent: data.net_profit < 0 ? 'text-red-600' : 'text-slate-900',
+            format: formatPrice,
+          },
+          {
+            label: 'Outstanding Balance',
+            value: data.outstanding_balance,
+            description: 'Amount still owed',
+            accent:
+              data.outstanding_balance > 0
+                ? 'text-amber-700'
+                : 'text-slate-900',
+            format: formatPrice,
+          },
+        ].map((metric, index) => (
+          <motion.div
+            key={metric.label}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05 }}
+            className="group rounded-2xl border border-white/60 bg-white/95 p-5 shadow-lg shadow-blue-950/10 backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-xl"          >
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+              {metric.label}
+            </p>
+
+            <p
+              className={`mt-3 font-display text-2xl font-semibold ${metric.accent}`}
+              style={{
+                fontVariantNumeric: 'lining-nums tabular-nums',
+              }}
+            >
+              <AnimatedNumber
+                value={metric.value}
+                format={metric.format}
+              />
+            </p>
+
+            <p className="mt-2 text-xs text-slate-400">
+              {metric.description}
+            </p>
+          </motion.div>
+        ))}
       </div>
 
-      <div className="mt-6 rounded-2xl border border-slate-100 bg-white p-6 shadow-soft dark:border-slate-700 dark:bg-slate-800">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-ink-900 dark:text-white">Sales Trend</h3>
-          <div className="flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-900">
-            {SALES_PERIODS.map((p) => (
-              <button
-                key={p.key}
-                onClick={() => setPeriodKey(p.key)}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-                  periodKey === p.key ? 'bg-white text-brand-600 shadow-sm dark:bg-slate-700' : 'text-slate-500 dark:text-slate-400'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+      {/* Sales trend */}
+<div className="mt-6 rounded-2xl border border-white/60 bg-white/95 p-5 shadow-lg shadow-blue-950/10 backdrop-blur-sm sm:p-6">
+    <div>
+      <h3 className="text-sm font-semibold text-slate-900">
+        Sales Trend
+      </h3>
+
+      <p className="mt-1 text-xs text-slate-400">
+        Revenue and expense activity over time
+      </p>
+
+      <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />
+          Revenue
         </div>
 
-        {trend.length === 0 && <p className="mt-4 text-sm text-slate-400">Not enough data yet.</p>}
+        <div className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+          Expenses
+        </div>
+      </div>
+    </div>
 
-        <div className="mt-4 flex h-32 items-end gap-1">
-          {trend.map((d, i) => (
-            <div key={d.period} className="group relative flex-1">
-              <motion.div
-                className={`origin-bottom rounded-t transition-colors ${
-                  d.net < 0 ? 'bg-red-400 group-hover:bg-red-500' : 'bg-brand-400 group-hover:bg-brand-500'
-                }`}
-                style={{ height: `${Math.max(2, (d.revenue / maxRevenue) * 100)}%` }}
-                initial={{ scaleY: 0 }}
-                animate={{ scaleY: 1 }}
-                transition={{ type: 'spring', stiffness: 200, damping: 20, delay: Math.min(i * 0.015, 0.5) }}
-              />
-              <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-ink-900 px-2 py-1.5 text-xs text-white group-hover:block">
-                <p className="font-semibold">{formatPeriodLabel(periodKey, d.period)}</p>
-                <p>Revenue: {formatPrice(d.revenue)} ({d.order_count} order{d.order_count === 1 ? '' : 's'})</p>
-                {d.expenses > 0 && <p>Expenses: {formatPrice(d.expenses)}</p>}
-                <p>Net: {formatPrice(d.net)}</p>
-              </div>
-            </div>
+    <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+      {SALES_PERIODS.map((p) => (
+        <button
+          key={p.key}
+          type="button"
+          onClick={() => setPeriodKey(p.key)}
+          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+            periodKey === p.key
+              ? 'bg-white text-brand-700 shadow-sm ring-1 ring-slate-200'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  </div>
+
+  {normalizedTrend.length === 0 ? (
+    <div className="mt-6 flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center">
+      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm">
+        <BarChart3 size={20} />
+      </div>
+
+      <p className="mt-3 text-sm font-semibold text-slate-700">
+        No sales in this period
+      </p>
+
+      <p className="mt-1 max-w-sm text-xs leading-5 text-slate-400">
+        There are no recorded sales for the selected date range.
+        Try another range to view your sales trend.
+      </p>
+
+      {periodKey !== 'monthly_sales' && (
+        <button
+          type="button"
+          onClick={() => setPeriodKey('monthly_sales')}
+          className="mt-4 rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-700"
+        >
+          View monthly sales
+        </button>
+      )}
+    </div>
+  ) : (
+    <div className="mt-6">
+      <div className="relative h-56">
+        {/* Grid lines */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+          {[0, 1, 2, 3, 4].map((line) => (
+            <div
+              key={line}
+              className="border-t border-slate-100"
+            />
           ))}
         </div>
+        {/* Bars */}
+        <div className="absolute inset-0 flex items-end gap-1.5 sm:gap-2">
+          {normalizedTrend.map((d, i) => {
+            const revenueHeight = Math.max(
+              2,
+              (d.revenue / maxRevenue) * 100
+            );
+
+            const expenseHeight =
+              d.expenses > 0
+                ? Math.max(
+                    2,
+                    (d.expenses / maxRevenue) * 100
+                  )
+                : 0;
+
+            return (
+              <div
+                key={d.period}
+                className="group relative flex h-full flex-1 items-end justify-center gap-1"
+              >
+                <div className="flex h-full w-full items-end justify-center gap-1">
+
+                  {/* Revenue */}
+                  <motion.div
+                    className="w-[42%] rounded-t-md bg-brand-500 transition-colors group-hover:bg-brand-600"
+                    style={{
+                      height: `${revenueHeight}%`,
+                    }}
+                    initial={{ scaleY: 0 }}
+                    animate={{ scaleY: 1 }}
+                    transition={{
+                      type: 'spring',
+                      stiffness: 200,
+                      damping: 20,
+                      delay: Math.min(i * 0.015, 0.5),
+                    }}
+                  />
+
+                  {/* Expenses */}
+                  {d.expenses > 0 && (
+                    <motion.div
+                      className="w-[42%] rounded-t-md bg-amber-400 transition-colors group-hover:bg-amber-500"
+                      style={{
+                        height: `${expenseHeight}%`,
+                      }}
+                      initial={{ scaleY: 0 }}
+                      animate={{ scaleY: 1 }}
+                      transition={{
+                        type: 'spring',
+                        stiffness: 200,
+                        damping: 20,
+                        delay: Math.min(
+                          i * 0.015 + 0.03,
+                          0.5
+                        ),
+                      }}
+                    />
+                  )}
+
+                </div>
+
+                {/* Tooltip */}
+                <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg group-hover:block">
+                  <p className="font-semibold">
+                    {formatPeriodLabel(
+                      periodKey,
+                      d.period
+                    )}
+                  </p>
+
+                  <p className="mt-1">
+                    Revenue: {formatPrice(d.revenue)}
+                  </p>
+
+                  <p>
+                    {d.order_count} order
+                    {d.order_count === 1 ? '' : 's'}
+                  </p>
+
+                  {d.expenses > 0 && (
+                    <p>
+                      Expenses:{' '}
+                      {formatPrice(d.expenses)}
+                    </p>
+                  )}
+
+                  <p>
+                    Net: {formatPrice(d.net)}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft dark:border-slate-700 dark:bg-slate-800">
-          <h3 className="text-sm font-semibold text-ink-900 dark:text-white">Orders by Status</h3>
-          <div className="mt-4 space-y-2">
-            {data.orders_by_status.map((s) => (
-              <div key={s.status} className="flex items-center justify-between text-sm">
-                <StatusPill status={s.status} />
-                <span className="font-semibold text-slate-600 dark:text-slate-300">{s.count}</span>
-              </div>
-            ))}
+      {/* Period labels */}
+      <div className="mt-3 flex gap-1.5 sm:gap-2">
+        {normalizedTrend.map((d) => (
+          <div
+            key={d.period}
+            className="min-w-0 flex-1 text-center text-[10px] text-slate-400"
+          >
+            {formatPeriodLabel(periodKey, d.period)}
           </div>
+        ))}
+      </div>
+    </div>
+  )}
+</div>
+
+      {/* Status + busiest dates */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Orders by status */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">
+              Orders by Status
+            </h3>
+            <p className="mt-1 text-xs text-slate-400">
+              Current order distribution
+            </p>
+          </div>
+
+          {totalStatusOrders > 0 ? (
+            <>
+              <div className="mt-6 flex h-4 overflow-hidden rounded-full bg-slate-100">
+                {data.orders_by_status.map((s) => (
+                  <div
+                    key={s.status}
+                    className={
+                      statusBarClasses[s.status] || 'bg-slate-300'
+                    }
+                    style={{
+                      width: `${(Number(s.count) / totalStatusOrders) * 100}%`,
+                    }}
+                    title={`${statusLabels[s.status] || s.status}: ${s.count}`}
+                  />
+                ))}
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">
+                {data.orders_by_status.map((s) => (
+                  <div
+                    key={s.status}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                          statusBarClasses[s.status] || 'bg-slate-300'
+                        }`}
+                      />
+                      <span className="truncate text-slate-600">
+                        {statusLabels[s.status] || s.status}
+                      </span>
+                    </div>
+
+                    <span
+                      className="font-semibold text-slate-900"
+                      style={{
+                        fontVariantNumeric: 'lining-nums tabular-nums',
+                      }}
+                    >
+                      {s.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="mt-6 text-sm text-slate-400">
+              No order status data available.
+            </p>
+          )}
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft dark:border-slate-700 dark:bg-slate-800">
-          <h3 className="text-sm font-semibold text-ink-900 dark:text-white">Busiest Drop-off Dates</h3>
-          <div className="mt-4 space-y-2">
-            {data.busiest_dates.length === 0 && <p className="text-sm text-slate-400">Not enough data yet.</p>}
-            {data.busiest_dates.map((b) => (
-              <div key={b.drop_off_date} className="flex items-center justify-between text-sm">
-                <span className="text-slate-600 dark:text-slate-300">{new Date(b.drop_off_date).toISOString().slice(0, 10)}</span>
-                <span className="font-semibold text-slate-600 dark:text-slate-300">{b.order_count} order{b.order_count === 1 ? '' : 's'}</span>
-              </div>
-            ))}
+        {/* Busiest dates */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">
+              Busiest Drop-off Dates
+            </h3>
+            <p className="mt-1 text-xs text-slate-400">
+              Dates with the highest number of orders
+            </p>
           </div>
+
+          {data.busiest_dates.length === 0 ? (
+            <p className="mt-6 text-sm text-slate-400">
+              Not enough data yet.
+            </p>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {data.busiest_dates.map((b, index) => {
+                const maxDateOrders = Math.max(
+                  1,
+                  ...data.busiest_dates.map((item) =>
+                    Number(item.order_count) || 0
+                  )
+                );
+
+                const width =
+                  (Number(b.order_count) / maxDateOrders) * 100;
+
+                return (
+                  <div key={b.drop_off_date}>
+                    <div className="mb-1.5 flex items-center justify-between text-xs">
+                      <span className="font-medium text-slate-600">
+                        {new Date(b.drop_off_date)
+                          .toISOString()
+                          .slice(0, 10)}
+                      </span>
+
+                      <span
+                        className="font-semibold text-slate-900"
+                        style={{
+                          fontVariantNumeric: 'lining-nums tabular-nums',
+                        }}
+                      >
+                        {b.order_count} order
+                        {b.order_count === 1 ? '' : 's'}
+                      </span>
+                    </div>
+
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${width}%` }}
+                        transition={{
+                          duration: 0.5,
+                          delay: index * 0.05,
+                        }}
+                        className="h-full rounded-full bg-brand-400"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

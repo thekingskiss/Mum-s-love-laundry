@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { runWithJobLock } = require('./jobLock');
 const { notifyUser } = require('./notify');
 const { BIRTHDAY_DISCOUNT_RATE } = require('../utils/birthday');
 
@@ -7,9 +8,9 @@ const { BIRTHDAY_DISCOUNT_RATE } = require('../utils/birthday');
 // SMS) mentioning the automatic discount, then marks them greeted for the
 // year so a second run today — or tomorrow — never double-sends. Returns
 // how many greetings were sent, for logging/manual-trigger feedback.
-async function sendBirthdayGreetings() {
+async function sendBirthdayGreetingsUnlocked() {
   const result = await pool.query(
-    `SELECT id, email, phone_number, full_name
+    `SELECT id, email, phone_number, full_name, birthday_discount_enabled
      FROM users
      WHERE date_of_birth IS NOT NULL
        AND EXTRACT(MONTH FROM date_of_birth) = EXTRACT(MONTH FROM CURRENT_DATE)
@@ -21,10 +22,13 @@ async function sendBirthdayGreetings() {
   let greetingsSent = 0;
 
   for (const customer of result.rows) {
+    const discountOffer = customer.birthday_discount_enabled === false
+      ? ''
+      : ` As our gift, any order you drop off today gets an automatic ${discountPercent}% discount.`;
     await notifyUser(customer.id, {
       type: 'birthday',
       title: `Happy Birthday, ${customer.full_name.split(' ')[0]}!`,
-      body: `Wishing you a wonderful birthday from all of us at Mum's Love Laundry! As our gift, any order you drop off today gets an automatic ${discountPercent}% discount.`,
+      body: `Wishing you a wonderful birthday from all of us at Mum's Love Laundry!${discountOffer}`,
       email: customer.email,
       phone: customer.phone_number,
     });
@@ -37,6 +41,10 @@ async function sendBirthdayGreetings() {
   }
 
   return greetingsSent;
+}
+
+async function sendBirthdayGreetings() {
+  return runWithJobLock('birthday-greetings', sendBirthdayGreetingsUnlocked);
 }
 
 module.exports = { sendBirthdayGreetings };

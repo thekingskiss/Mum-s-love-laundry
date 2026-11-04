@@ -1,8 +1,10 @@
 const pool = require('../config/db');
 const { reserveCapacity, releaseCapacity } = require('./capacityController');
+const { generateInvoiceForNewOrder } = require('./invoiceController');
 const { notifyUser, sendEmail, sendSms } = require('../services/notify');
 const { calculateLateFee } = require('../utils/lateFee');
 const { calculateBirthdayDiscount } = require('../utils/birthday');
+const { canViewOrder } = require('../utils/branchAccess');
 const { SHOP_NAME, SHOP_ADDRESS, SHOP_PHONE, SHOP_EMAIL } = require('../config/shopInfo');
 const {
   STATUS_LABELS,
@@ -24,7 +26,15 @@ function withLateFee(order) {
     order.ready_for_pickup_at,
     order.completed_at || new Date()
   );
-  return { ...order, days_ready_for_pickup: daysReady, days_overdue: daysOverdue, late_fee: fee };
+  const lateFeePaid = Number(order.late_fee_paid) || 0;
+  return {
+    ...order,
+    days_ready_for_pickup: daysReady,
+    days_overdue: daysOverdue,
+    late_fee: fee,
+    late_fee_paid: lateFeePaid,
+    late_fee_due: Math.max(fee - lateFeePaid, 0),
+  };
 }
 
 const ORDER_SELECT = `
@@ -40,6 +50,7 @@ const ORDER_SELECT = `
            WHEN COALESCE(pay.amount_paid, 0) + 0.005 >= o.total_price THEN 'paid'
            ELSE 'partial'
          END AS payment_status,
+         COALESCE(pay.late_fee_paid, 0) AS late_fee_paid,
          (SELECT created_at FROM order_events WHERE order_id = o.id AND to_status = 'ready_for_pickup' ORDER BY created_at DESC LIMIT 1) AS ready_for_pickup_at,
          (SELECT created_at FROM order_events WHERE order_id = o.id AND to_status = 'completed' ORDER BY created_at DESC LIMIT 1) AS completed_at
   FROM orders o
@@ -50,7 +61,8 @@ const ORDER_SELECT = `
     FROM order_items WHERE order_id = o.id
   ) oi ON true
   LEFT JOIN LATERAL (
-    SELECT SUM(CASE WHEN payment_type = 'refund' THEN -amount ELSE amount END) AS amount_paid
+    SELECT SUM(CASE WHEN payment_type = 'refund' THEN -amount WHEN payment_type = 'late_fee' THEN 0 ELSE amount END) AS amount_paid,
+           SUM(CASE WHEN payment_type = 'late_fee' THEN amount ELSE 0 END) AS late_fee_paid
     FROM payments WHERE order_id = o.id
   ) pay ON true
 `;
@@ -94,10 +106,14 @@ async function insertOrder(client, { userId, branchId, dropOffDate, pickupDate, 
   // A 5% birthday discount applies when the drop-off date falls on the
   // customer's birthday (month + day, any year) — checked here so both the
   // customer self-service flow and the staff walk-in flow get it for free.
-  const customerResult = await client.query('SELECT date_of_birth FROM users WHERE id = $1', [userId]);
+  const customerResult = await client.query(
+    'SELECT date_of_birth, birthday_discount_enabled, auto_generate_invoice FROM users WHERE id = $1',
+    [userId]
+  );
+  const customer = customerResult.rows[0];
   const { discountAmount, total } = calculateBirthdayDiscount(
     subtotal,
-    customerResult.rows[0]?.date_of_birth,
+    customer?.birthday_discount_enabled === false ? null : customer?.date_of_birth,
     dropOffDate
   );
   const total_price = total;
@@ -125,7 +141,18 @@ async function insertOrder(client, { userId, branchId, dropOffDate, pickupDate, 
     [order.id, createdBy, note || null]
   );
 
-  return { order, lineItems, total_price };
+  return { order, lineItems, total_price, autoGenerateInvoice: customer?.auto_generate_invoice === true };
+}
+
+// Runs after the order has committed. The order is already valid, so a failure
+// here is logged rather than reported as a failed order; staff can still
+// generate the invoice by hand.
+async function autoInvoiceAfterOrder(orderId, actorId) {
+  try {
+    await generateInvoiceForNewOrder(orderId, actorId);
+  } catch (err) {
+    console.error(`[invoices] auto-generate failed for order ${orderId}:`, err.message);
+  }
 }
 
 async function createOrder(req, res, next) {
@@ -156,7 +183,7 @@ async function createOrder(req, res, next) {
     }
 
     await client.query('BEGIN');
-    const { order, lineItems } = await insertOrder(client, {
+    const { order, lineItems, autoGenerateInvoice } = await insertOrder(client, {
       userId: req.user.id,
       branchId: branch_id,
       dropOffDate: drop_off_date,
@@ -166,6 +193,10 @@ async function createOrder(req, res, next) {
       note: notes && notes.trim() ? notes.trim() : null,
     });
     await client.query('COMMIT');
+
+    if (autoGenerateInvoice) {
+      await autoInvoiceAfterOrder(order.id, req.user.id);
+    }
 
     const phoneResult = await pool.query('SELECT phone_number FROM users WHERE id = $1', [req.user.id]);
     const itemsSummary = lineItems.map((li) => `${li.item_name} x${li.quantity}`).join(', ');
@@ -243,7 +274,7 @@ async function getOrder(req, res, next) {
     }
     const order = result.rows[0];
 
-    if (order.user_id !== req.user.id && !isStaffRole(req.user.role)) {
+    if (!canViewOrder(req.user, order)) {
       return res.status(403).json({ error: 'You do not have permission to view this order.' });
     }
 
@@ -262,11 +293,11 @@ async function getOrderHistory(req, res, next) {
   try {
     const { id } = req.params;
 
-    const orderCheck = await pool.query('SELECT user_id FROM orders WHERE id = $1', [id]);
+    const orderCheck = await pool.query('SELECT user_id, branch_id FROM orders WHERE id = $1', [id]);
     if (orderCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Order not found.' });
     }
-    if (orderCheck.rows[0].user_id !== req.user.id && !isStaffRole(req.user.role)) {
+    if (!canViewOrder(req.user, orderCheck.rows[0])) {
       return res.status(403).json({ error: 'You do not have permission to view this order.' });
     }
 
@@ -288,22 +319,28 @@ async function cancelOrder(req, res, next) {
   const client = await pool.connect();
   try {
     const { id } = req.params;
-    const orderResult = await client.query('SELECT * FROM orders WHERE id = $1', [id]);
+
+    // Hold the row lock across the status check so two simultaneous cancels
+    // can't both pass it and release the same capacity slot twice.
+    await client.query('BEGIN');
+    const orderResult = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [id]);
     if (orderResult.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Order not found.' });
     }
     const order = orderResult.rows[0];
 
     if (order.user_id !== req.user.id) {
+      await client.query('ROLLBACK');
       return res.status(403).json({ error: 'You can only cancel your own orders.' });
     }
     if (!CUSTOMER_CANCELLABLE_STATUSES.includes(order.status)) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         error: `Orders can only be cancelled while status is one of: ${CUSTOMER_CANCELLABLE_STATUSES.join(', ')}.`,
       });
     }
 
-    await client.query('BEGIN');
     await client.query('UPDATE orders SET status = $1 WHERE id = $2', ['cancelled', id]);
     await client.query(
       `INSERT INTO order_events (order_id, from_status, to_status, changed_by, notes) VALUES ($1, $2, 'cancelled', $3, 'Cancelled by customer')`,
@@ -375,7 +412,7 @@ async function sendReceipt(req, res, next) {
     }
     const order = result.rows[0];
 
-    if (order.user_id !== req.user.id && !isStaffRole(req.user.role)) {
+    if (!canViewOrder(req.user, order)) {
       return res.status(403).json({ error: 'You do not have permission to share this order.' });
     }
     if (order.status === 'cancelled') {
@@ -430,5 +467,6 @@ module.exports = {
   cancelOrder,
   sendReceipt,
   insertOrder,
+  autoInvoiceAfterOrder,
   isValidDateString,
 };

@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const pool = require('../config/db');
 const { notifyUser } = require('../services/notify');
-const { isStaffRole } = require('../config/orderLifecycle');
+const { DIFFERENT_BRANCH_ERROR, canAccessBranch, canViewOrder } = require('../utils/branchAccess');
 const { NET_PAID_EXPR } = require('./paymentController');
 const { finalizePaystackPayment } = require('./paystackController');
 const paystack = require('../services/paystack');
@@ -122,6 +122,23 @@ async function generateInvoiceCore(client, orderId, { dueDate, notes, actorId, r
   return invoice;
 }
 
+// Used when a customer has auto_generate_invoice on. There's no branch check
+// because the order was created moments ago by this same request.
+async function generateInvoiceForNewOrder(orderId, actorId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const invoice = await generateInvoiceCore(client, orderId, { actorId, requesterBranchId: null });
+    await client.query('COMMIT');
+    return invoice;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // Staff generates an invoice from an existing order — snapshots its items
 // (mirrors how order_items itself snapshots the laundry_items catalog) and
 // freezes a due date, invoice number, and pay-without-login token.
@@ -224,10 +241,14 @@ async function addInvoiceLine(req, res, next) {
 
     await client.query('BEGIN');
 
-    const invoiceCheck = await client.query('SELECT id, voided_at FROM invoices WHERE id = $1 FOR UPDATE', [id]);
+    const invoiceCheck = await client.query('SELECT id, voided_at, branch_id FROM invoices WHERE id = $1 FOR UPDATE', [id]);
     if (invoiceCheck.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Invoice not found.' });
+    }
+    if (!canAccessBranch(req.user, invoiceCheck.rows[0].branch_id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
     }
     if (invoiceCheck.rows[0].voided_at) {
       await client.query('ROLLBACK');
@@ -266,10 +287,14 @@ async function removeInvoiceLine(req, res, next) {
 
     await client.query('BEGIN');
 
-    const invoiceCheck = await client.query('SELECT id, voided_at FROM invoices WHERE id = $1 FOR UPDATE', [id]);
+    const invoiceCheck = await client.query('SELECT id, voided_at, branch_id FROM invoices WHERE id = $1 FOR UPDATE', [id]);
     if (invoiceCheck.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Invoice not found.' });
+    }
+    if (!canAccessBranch(req.user, invoiceCheck.rows[0].branch_id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
     }
     if (invoiceCheck.rows[0].voided_at) {
       await client.query('ROLLBACK');
@@ -313,9 +338,12 @@ async function updateInvoice(req, res, next) {
       return res.status(400).json({ error: 'due_date must be a valid date in YYYY-MM-DD format.' });
     }
 
-    const current = await pool.query('SELECT voided_at FROM invoices WHERE id = $1', [id]);
+    const current = await pool.query('SELECT voided_at, branch_id FROM invoices WHERE id = $1', [id]);
     if (current.rows.length === 0) {
       return res.status(404).json({ error: 'Invoice not found.' });
+    }
+    if (!canAccessBranch(req.user, current.rows[0].branch_id)) {
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
     }
     if (current.rows[0].voided_at) {
       return res.status(400).json({ error: 'This invoice has been voided.' });
@@ -346,7 +374,7 @@ async function getInvoice(req, res, next) {
       return res.status(404).json({ error: 'Invoice not found.' });
     }
     const invoice = result.rows[0];
-    if (invoice.order_owner_id !== req.user.id && !isStaffRole(req.user.role)) {
+    if (!canViewOrder(req.user, { user_id: invoice.order_owner_id, branch_id: invoice.branch_id })) {
       return res.status(403).json({ error: 'You do not have permission to view this invoice.' });
     }
 
@@ -365,11 +393,11 @@ async function getInvoice(req, res, next) {
 async function getInvoiceForOrder(req, res, next) {
   try {
     const { id } = req.params;
-    const orderCheck = await pool.query('SELECT user_id FROM orders WHERE id = $1', [id]);
+    const orderCheck = await pool.query('SELECT user_id, branch_id FROM orders WHERE id = $1', [id]);
     if (orderCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Order not found.' });
     }
-    if (orderCheck.rows[0].user_id !== req.user.id && !isStaffRole(req.user.role)) {
+    if (!canViewOrder(req.user, orderCheck.rows[0])) {
       return res.status(403).json({ error: 'You do not have permission to view this order.' });
     }
 
@@ -442,12 +470,16 @@ async function voidInvoice(req, res, next) {
     // FOR UPDATE can't combine with an aggregate subquery in the same
     // statement, so the row lock and the net-paid aggregate are two
     // separate queries (same split paymentController.recordPayment uses).
-    const lockResult = await client.query('SELECT id, order_id, voided_at FROM invoices WHERE id = $1 FOR UPDATE', [id]);
+    const lockResult = await client.query('SELECT id, order_id, voided_at, branch_id FROM invoices WHERE id = $1 FOR UPDATE', [id]);
     if (lockResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Invoice not found.' });
     }
     const invoice = lockResult.rows[0];
+    if (!canAccessBranch(req.user, invoice.branch_id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
+    }
     if (invoice.voided_at) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'This invoice is already voided.' });
@@ -481,8 +513,8 @@ async function sendInvoice(req, res, next) {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      `SELECT i.invoice_number, i.due_date, i.total_amount, i.public_token, i.voided_at,
-              o.user_id, u.email, u.phone_number,
+      `SELECT i.invoice_number, i.due_date, i.total_amount, i.public_token, i.voided_at, i.branch_id,
+              o.user_id, u.email, u.phone_number, u.invoice_notifications,
               COALESCE(pay.net_paid, 0) AS net_paid
        FROM invoices i
        JOIN orders o ON o.id = i.order_id
@@ -495,6 +527,9 @@ async function sendInvoice(req, res, next) {
       return res.status(404).json({ error: 'Invoice not found.' });
     }
     const invoice = result.rows[0];
+    if (!canAccessBranch(req.user, invoice.branch_id)) {
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
+    }
     if (invoice.voided_at) {
       return res.status(400).json({ error: 'This invoice has been voided.' });
     }
@@ -515,12 +550,24 @@ async function sendInvoice(req, res, next) {
       phone: invoice.phone_number,
     });
 
+    const optedOut = invoice.invoice_notifications === false;
     await pool.query(
       `INSERT INTO invoice_activity (invoice_id, event_type, actor_id, body) VALUES ($1, 'sent', $2, $3)`,
-      [id, req.user.id, `Sent to ${invoice.email || invoice.phone_number}.`]
+      [
+        id,
+        req.user.id,
+        optedOut
+          ? 'Posted in the app only: customer has turned off invoice messages.'
+          : `Sent to ${invoice.email || invoice.phone_number}.`,
+      ]
     );
 
-    res.json({ message: 'Invoice sent.', link });
+    res.json({
+      message: optedOut
+        ? 'This customer has turned off invoice messages, so it was posted in the app only. Share the link with them directly.'
+        : 'Invoice sent.',
+      link,
+    });
   } catch (err) {
     next(err);
   }
@@ -534,7 +581,7 @@ async function downloadInvoicePdf(req, res, next) {
       return res.status(404).json({ error: 'Invoice not found.' });
     }
     const invoice = result.rows[0];
-    if (invoice.order_owner_id !== req.user.id && !isStaffRole(req.user.role)) {
+    if (!canViewOrder(req.user, { user_id: invoice.order_owner_id, branch_id: invoice.branch_id })) {
       return res.status(403).json({ error: 'You do not have permission to view this invoice.' });
     }
 
@@ -555,13 +602,13 @@ async function listInvoiceActivity(req, res, next) {
   try {
     const { id } = req.params;
     const invoiceCheck = await pool.query(
-      'SELECT o.user_id FROM invoices i JOIN orders o ON o.id = i.order_id WHERE i.id = $1',
+      'SELECT o.user_id, o.branch_id FROM invoices i JOIN orders o ON o.id = i.order_id WHERE i.id = $1',
       [id]
     );
     if (invoiceCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Invoice not found.' });
     }
-    if (invoiceCheck.rows[0].user_id !== req.user.id && !isStaffRole(req.user.role)) {
+    if (!canViewOrder(req.user, invoiceCheck.rows[0])) {
       return res.status(403).json({ error: 'You do not have permission to view this invoice.' });
     }
 
@@ -592,9 +639,12 @@ async function postInvoiceMessage(req, res, next) {
       return res.status(400).json({ error: 'body must be 1000 characters or fewer.' });
     }
 
-    const invoiceCheck = await pool.query('SELECT id FROM invoices WHERE id = $1', [id]);
+    const invoiceCheck = await pool.query('SELECT id, branch_id FROM invoices WHERE id = $1', [id]);
     if (invoiceCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Invoice not found.' });
+    }
+    if (!canAccessBranch(req.user, invoiceCheck.rows[0].branch_id)) {
+      return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
     }
 
     const result = await pool.query(
@@ -710,6 +760,7 @@ async function verifyPublicPayment(req, res, next) {
 }
 
 module.exports = {
+  generateInvoiceForNewOrder,
   generateInvoice,
   bulkGenerateInvoices,
   addInvoiceLine,

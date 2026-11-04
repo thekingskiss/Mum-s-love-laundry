@@ -4,7 +4,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const cron = require('node-cron');
 
 const authRoutes = require('./routes/authRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
@@ -20,10 +19,6 @@ const paystackRoutes = require('./routes/paystackRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const branchRoutes = require('./routes/branchRoutes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
-const { runPickupReminders } = require('./services/pickupReminders');
-const { runBalanceDueReminders } = require('./services/balanceDueReminders');
-const { runInvoiceReminders } = require('./services/invoiceReminders');
-const { sendBirthdayGreetings } = require('./services/birthdayGreetings');
 
 // A weak or missing signing secret compromises every account on the system
 // (anyone could forge an admin token), so refuse to boot with one in
@@ -38,6 +33,13 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
   }
 }
 
+if (
+  process.env.NODE_ENV === 'production' &&
+  (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET)
+) {
+  console.error('FATAL: Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET for production avatar storage.');
+  process.exit(1);
+}
 const app = express();
 
 // Behind a reverse proxy in production (e.g. Nginx/Render/Railway terminating
@@ -91,34 +93,6 @@ app.use('/api/branches', branchRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
-
-// Daily sweep reminding customers about orders still sitting ready for
-// pickup (and, once overdue, the accruing storage fee). Failures are logged
-// rather than crashing the server — a missed reminder day isn't fatal.
-cron.schedule('0 9 * * *', () => {
-  runPickupReminders().catch((err) => console.error('[reminders] scheduled run failed:', err.message));
-});
-
-// Daily sweep wishing customers a happy birthday (and reminding them their
-// order today gets the automatic discount) — a separate job from pickup
-// reminders so each is independently testable/loggable.
-cron.schedule('0 9 * * *', () => {
-  sendBirthdayGreetings().catch((err) => console.error('[birthdays] scheduled run failed:', err.message));
-});
-
-// Daily sweep reminding customers about orders with an outstanding balance —
-// independent of pickup status, so a paid-off order stops getting reminded
-// while a picked-up-but-unpaid one keeps getting nudged.
-cron.schedule('0 9 * * *', () => {
-  runBalanceDueReminders().catch((err) => console.error('[balance-reminders] scheduled run failed:', err.message));
-});
-
-// Daily sweep reminding customers about invoices that are due today or
-// still unpaid past their due date — the automatic follow-up an invoice
-// handles on its own instead of staff chasing customers manually.
-cron.schedule('0 9 * * *', () => {
-  runInvoiceReminders().catch((err) => console.error('[invoice-reminders] scheduled run failed:', err.message));
-});
 
 const PORT = process.env.PORT || 4000;
 const server = app.listen(PORT, () => {

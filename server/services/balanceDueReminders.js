@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { runWithJobLock } = require('./jobLock');
 const { notifyUser } = require('./notify');
 const { NET_PAID_EXPR } = require('../controllers/paymentController');
 
@@ -13,7 +14,7 @@ function isReminderDue(daysSinceDropOff) {
 // the customer (email + SMS) if it matches the reminder schedule and hasn't
 // already been reminded today. Returns how many reminders were sent, for
 // logging/manual-trigger feedback.
-async function runBalanceDueReminders() {
+async function runBalanceDueRemindersUnlocked() {
   const result = await pool.query(
     `SELECT o.id, o.user_id, o.drop_off_date, o.total_price, u.email, u.phone_number, u.full_name,
             (SELECT string_agg(item_name || ' x' || quantity, ', ') FROM order_items WHERE order_id = o.id) AS items_summary,
@@ -49,6 +50,10 @@ async function runBalanceDueReminders() {
   }
 
   return remindersSent;
+}
+
+async function runBalanceDueReminders() {
+  return runWithJobLock('balance-due-reminders', runBalanceDueRemindersUnlocked);
 }
 
 module.exports = { runBalanceDueReminders, isReminderDue };

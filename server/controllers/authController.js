@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const pool = require('../config/db');
+const { storeAvatar, deleteAvatar } = require('../services/avatarStorage');
 const { isZoneSupported, getActiveZoneNames } = require('../utils/zones');
 const { sendEmail } = require('../services/notify');
 
@@ -46,6 +47,13 @@ function toPublicUser(user) {
     preferred_currency: user.preferred_currency,
     theme_preference: user.theme_preference,
     date_of_birth: user.date_of_birth,
+    sms_order_updates: user.sms_order_updates,
+    email_order_updates: user.email_order_updates,
+    pickup_reminders: user.pickup_reminders,
+    low_stock_alerts: user.low_stock_alerts,
+    invoice_notifications: user.invoice_notifications,
+    birthday_discount_enabled: user.birthday_discount_enabled,
+    auto_generate_invoice: user.auto_generate_invoice,
     created_at: user.created_at,
   };
 }
@@ -93,19 +101,28 @@ async function register(req, res, next) {
         break;
       }
     }
-
     const result = await pool.query(
       `INSERT INTO users (email, password_hash, full_name, phone_number, location_zone, username, date_of_birth)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, email, username, full_name, phone_number, location_zone, role,
-                 avatar_url, preferred_language, preferred_currency, theme_preference, date_of_birth, created_at`,
-      [email.toLowerCase().trim(), password_hash, full_name.trim(), phone_number.trim(), location_zone.trim(), username, date_of_birth || null]
+          avatar_url, preferred_language, preferred_currency, theme_preference, date_of_birth,
+          sms_order_updates, email_order_updates, pickup_reminders, low_stock_alerts,
+          invoice_notifications, birthday_discount_enabled, auto_generate_invoice, created_at`,
+      [
+        email.toLowerCase().trim(),
+        password_hash,
+        full_name.trim(),
+        phone_number.trim(),
+        location_zone.trim(),
+        username,
+        date_of_birth || null,
+      ]
     );
 
-    const user = result.rows[0];
-    const token = signToken(user);
-
-    res.status(201).json({ token, user: toPublicUser(user) });
+    return res.status(201).json({
+      token: signToken(result.rows[0]),
+      user: toPublicUser(result.rows[0]),
+    });
   } catch (err) {
     next(err);
   }
@@ -142,7 +159,9 @@ async function me(req, res, next) {
   try {
     const result = await pool.query(
       `SELECT id, email, username, full_name, phone_number, location_zone, role, branch_id,
-              avatar_url, preferred_language, preferred_currency, theme_preference, date_of_birth, created_at
+              avatar_url, preferred_language, preferred_currency, theme_preference, date_of_birth,
+              sms_order_updates, email_order_updates, pickup_reminders, low_stock_alerts,
+              invoice_notifications, birthday_discount_enabled, auto_generate_invoice, created_at
        FROM users WHERE id = $1`,
       [req.user.id]
     );
@@ -159,7 +178,25 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function updateProfile(req, res, next) {
   try {
-    const { email, current_password, username, full_name, phone_number, location_zone, preferred_language, preferred_currency, theme_preference, date_of_birth } = req.body;
+    const {
+  email,
+  current_password,
+  username,
+  full_name,
+  phone_number,
+  location_zone,
+  preferred_language,
+  preferred_currency,
+  theme_preference,
+  date_of_birth,
+  sms_order_updates,
+  email_order_updates,
+  pickup_reminders,
+  low_stock_alerts,
+  invoice_notifications,
+  birthday_discount_enabled,
+  auto_generate_invoice,
+} = req.body;
     const updates = [];
     const params = [];
 
@@ -250,6 +287,27 @@ async function updateProfile(req, res, next) {
       updates.push(`date_of_birth = $${params.length}`);
     }
 
+    const booleanPreferences = {
+  sms_order_updates,
+  email_order_updates,
+  pickup_reminders,
+  low_stock_alerts,
+  invoice_notifications,
+  birthday_discount_enabled,
+  auto_generate_invoice,
+};
+
+for (const [field, value] of Object.entries(booleanPreferences)) {
+  if (value !== undefined) {
+    if (typeof value !== 'boolean') {
+      return res.status(400).json({ error: `${field} must be a boolean.` });
+    }
+
+    params.push(value);
+    updates.push(`${field} = $${params.length}`);
+  }
+}
+
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No valid fields provided to update.' });
     }
@@ -269,6 +327,7 @@ async function updateProfile(req, res, next) {
 }
 
 async function uploadAvatar(req, res, next) {
+  let avatarUrl;
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image file was uploaded.' });
@@ -276,26 +335,33 @@ async function uploadAvatar(req, res, next) {
 
     const current = await pool.query('SELECT avatar_url FROM users WHERE id = $1', [req.user.id]);
     const previousUrl = current.rows[0]?.avatar_url;
+    avatarUrl = await storeAvatar(req.user.id, req.file);
 
-    const avatar_url = `/uploads/avatars/${req.file.filename}`;
-    const result = await pool.query(
-      `UPDATE users SET avatar_url = $1 WHERE id = $2
-       RETURNING id, email, username, full_name, phone_number, location_zone, role,
-                 avatar_url, preferred_language, preferred_currency, theme_preference, date_of_birth, created_at`,
-      [avatar_url, req.user.id]
-    );
-
-    if (previousUrl && previousUrl.startsWith('/uploads/avatars/')) {
-      const previousPath = path.join(__dirname, '..', previousUrl);
-      fs.unlink(previousPath, () => {});
+    let result;
+    try {
+      result = await pool.query(
+        'UPDATE users SET avatar_url = $1 WHERE id = $2 ' +
+          'RETURNING id, email, username, full_name, phone_number, location_zone, role, ' +
+          'avatar_url, preferred_language, preferred_currency, theme_preference, date_of_birth, ' +
+          'sms_order_updates, email_order_updates, pickup_reminders, low_stock_alerts, ' +
+          'invoice_notifications, birthday_discount_enabled, auto_generate_invoice, created_at',
+        [avatarUrl, req.user.id]
+      );
+    } catch (error) {
+      console.error('[avatar] database update failed after upload; cloud asset may need cleanup:', error.message);
+      throw error;
     }
 
+    if (previousUrl && previousUrl !== avatarUrl) {
+      await deleteAvatar(previousUrl).catch((error) =>
+        console.error('[avatar] failed to remove the previous image:', error.message)
+      );
+    }
     res.json({ user: result.rows[0] });
   } catch (err) {
     next(err);
   }
 }
-
 async function forgotPassword(req, res, next) {
   try {
     const { email } = req.body;
