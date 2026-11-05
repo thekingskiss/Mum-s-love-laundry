@@ -14,6 +14,7 @@ const MIGRATIONS = [
   { version: 16, filename: 'migrate_v16_branches.sql' },
   { version: 17, filename: 'migrate_v17_settings.sql' },
   { version: 18, filename: 'migrate_v18_late_fee_payments.sql' },
+  { version: 19, filename: 'migrate_v19_backfill_branches.sql' },
 ];
 const LOCK_NAMESPACE = 187003;
 const LOCK_ID = 1;
