@@ -22,6 +22,8 @@ import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import BookingPage from './pages/BookingPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import StaffPage from './pages/StaffPage.jsx';
+import AdminPage from './pages/AdminPage.jsx';
+import { ADMIN_ROLES, STAFF_ROLES } from './lib/roles';
 import SettingsPage from './pages/SettingsPage.jsx';
 
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage.jsx';
@@ -34,8 +36,6 @@ import InvoiceDetailPage from './pages/InvoiceDetailPage.jsx';
 import InvoicePublicPage from './pages/InvoicePublicPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
-const STAFF_ROLES = ['laundry_staff', 'administrator', 'super_admin'];
-
 export default function App() {
   const location = useLocation();
 
@@ -43,7 +43,8 @@ export default function App() {
     location.pathname === '/dashboard' ||
     location.pathname === '/book' ||
     location.pathname === '/settings' ||
-    location.pathname === '/staff';
+    location.pathname === '/staff' ||
+    location.pathname === '/admin';
 
   return (
     <div className="min-h-screen bg-white text-ink-900 dark:bg-ink-900 dark:text-slate-100">
@@ -84,7 +85,7 @@ export default function App() {
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
 
-            {/* Staff / Admin dashboard */}
+            {/* Staff workspace (admins can open it to preview the staff view) */}
             <Route
               element={
                 <ProtectedRoute roles={STAFF_ROLES}>
@@ -93,6 +94,17 @@ export default function App() {
               }
             >
               <Route path="/staff" element={<StaffPage />} />
+            </Route>
+
+            {/* Admin workspace */}
+            <Route
+              element={
+                <ProtectedRoute roles={ADMIN_ROLES}>
+                  <DashboardLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/admin" element={<AdminPage />} />
             </Route>
 
             {/* Protected supporting pages */}

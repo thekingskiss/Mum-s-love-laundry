@@ -1,16 +1,19 @@
-import { useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
+  ArrowLeftRight,
   BarChart3,
   Bell,
   Boxes,
   Building2,
   CalendarCheck,
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
   FileText,
+  History,
   Home,
   LogOut,
   Mail,
@@ -25,10 +28,12 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
+import api from '../api/axios';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useBranch } from '../context/BranchContext.jsx';
+import { ADMIN_ROLES, STAFF_ROLES, workspacePath } from '../lib/roles';
 
-const ADMIN_ROLES = ['administrator', 'super_admin'];
-const STAFF_ROLES = ['laundry_staff', 'administrator', 'super_admin'];
+const BADGE_REFRESH_MS = 60_000;
 
 const customerItems = [
   {
@@ -43,112 +48,222 @@ const customerItems = [
   },
   {
     label: 'My Orders',
-    to: '/dashboard',
+    to: '/dashboard?tab=orders',
     icon: ClipboardList,
   },
   {
     label: 'Payments',
-    to: '/dashboard',
+    to: '/dashboard?tab=payments',
     icon: Wallet,
   },
   {
     label: 'Notifications',
-    to: '/dashboard',
+    to: '/dashboard?tab=notifications',
     icon: Bell,
   },
 ];
 
-const staffItems = [
-  // General staff navigation
-  {
-    label: 'Dashboard',
-    tab: null,
-    icon: Home,
-  },
-  {
-    label: 'Orders',
-    tab: 'orders',
-    icon: ClipboardList,
-  },
-  {
-    label: 'Customers',
-    tab: 'customers',
-    icon: Users,
-  },
-  {
-    label: 'Messages',
-    tab: 'messages',
-    icon: Mail,
-  },
-  {
-    label: 'Invoices',
-    tab: 'invoices',
-    icon: FileText,
-  },
+const dashboardItem = { label: 'Dashboard', tab: null, icon: Home };
 
-  // Administrator / Super Administrator
+const staffItems = [
+  dashboardItem,
+  { label: 'Orders', tab: 'orders', icon: ClipboardList },
+  { label: 'Customers', tab: 'customers', icon: Users },
+  { label: 'Messages', tab: 'messages', icon: Mail },
+  { label: 'Invoices', tab: 'invoices', icon: FileText },
+];
+
+// badge names a field of GET /admin/overview. Opening one group closes the
+// others, which keeps the whole list on screen without scrolling.
+const adminGroups = [
   {
-    label: 'Scheduled Pickups',
-    tab: 'pickups',
-    icon: CalendarCheck,
-    adminOnly: true,
+    label: 'Operations',
+    items: [
+      { label: 'Orders', tab: 'orders', icon: ClipboardList },
+      { label: 'Customers', tab: 'customers', icon: Users },
+      { label: 'Messages', tab: 'messages', icon: Mail, badge: 'unread_messages' },
+      { label: 'Invoices', tab: 'invoices', icon: FileText },
+      { label: 'Scheduled Pickups', tab: 'pickups', icon: CalendarCheck, badge: 'overdue_pickups' },
+    ],
   },
   {
-    label: 'Analytics',
-    tab: 'analytics',
-    icon: BarChart3,
-    adminOnly: true,
+    label: 'Management',
+    items: [
+      { label: 'Analytics', tab: 'analytics', icon: BarChart3 },
+      { label: 'Payments', tab: 'payments', icon: Wallet },
+      { label: 'Expenses', tab: 'expenses', icon: Receipt },
+      { label: 'Inventory', tab: 'inventory', icon: Boxes, badge: 'low_stock_count' },
+    ],
   },
   {
-    label: 'Payments',
-    tab: 'payments',
-    icon: Wallet,
-    adminOnly: true,
-  },
-  {
-    label: 'Inventory',
-    tab: 'inventory',
-    icon: Boxes,
-    adminOnly: true,
-  },
-  {
-    label: 'Expenses',
-    tab: 'expenses',
-    icon: Receipt,
-    adminOnly: true,
-  },
-  {
-    label: 'Staff',
-    tab: 'staff',
-    icon: Users,
-    adminOnly: true,
-  },
-  {
-    label: 'Branches',
-    tab: 'branches',
-    icon: Building2,
-    adminOnly: true,
-    superAdminOnly: true,
-  },
-  {
-    label: 'Zones',
-    tab: 'zones',
-    icon: MapPin,
-    adminOnly: true,
-  },
-  {
-    label: 'Pricing',
-    tab: 'pricing',
-    icon: Percent,
-    adminOnly: true,
-  },
-  {
-    label: 'Capacity',
-    tab: 'capacity',
-    icon: CalendarDays,
-    adminOnly: true,
+    label: 'Administration',
+    items: [
+      { label: 'Branches', tab: 'branches', icon: Building2, superAdminOnly: true },
+      { label: 'Pricing', tab: 'pricing', icon: Percent },
+      { label: 'Staff accounts', tab: 'staff', icon: Users, superAdminOnly: true },
+      { label: 'Zones', tab: 'zones', icon: MapPin },
+      { label: 'Capacity', tab: 'capacity', icon: CalendarDays },
+      { label: 'Audit log', tab: 'audit', icon: History, superAdminOnly: true },
+      { label: 'Settings', to: '/settings', icon: Settings },
+    ],
   },
 ];
+
+function CountBadge({ count, compact }) {
+  if (!count) return null;
+  const text = count > 99 ? '99+' : count;
+
+  if (compact) {
+    return (
+      <span
+        aria-label={`${count} need attention`}
+        className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500"
+      />
+    );
+  }
+
+  return (
+    <span className="ml-auto shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold leading-none text-red-700 dark:bg-red-950/60 dark:text-red-300">
+      {text}
+    </span>
+  );
+}
+
+function SidebarButton({ item, active, showLabels, badge, adminAccent, onClick }) {
+  const Icon = item.icon;
+  const activeClass = adminAccent
+    ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300'
+    : 'bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-400';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={!showLabels ? item.label : undefined}
+      aria-current={active ? 'page' : undefined}
+      className={[
+        'group relative flex w-full items-center rounded-xl px-3 text-left text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
+        adminAccent ? 'py-2' : 'py-2.5',
+        showLabels ? 'gap-3' : 'justify-center',
+        active
+          ? activeClass
+          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
+      ].join(' ')}
+    >
+      <Icon className="h-5 w-5 shrink-0" />
+
+      {showLabels && (
+        <span className="truncate">{item.label}</span>
+      )}
+
+      <CountBadge count={badge} compact={!showLabels} />
+    </button>
+  );
+}
+
+function AdminNav({ isSuperAdmin, showLabels, onNavigate }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { currentBranchId } = useBranch();
+  const [figures, setFigures] = useState(null);
+
+  // location.search is a dependency so a badge updates after acting on it.
+  useEffect(() => {
+    let cancelled = false;
+
+    function load() {
+      api
+        .get('/admin/overview', { params: { branch_id: currentBranchId || undefined } })
+        .then(({ data }) => {
+          if (!cancelled) setFigures(data);
+        })
+        .catch(() => {});
+    }
+
+    load();
+    const interval = setInterval(load, BADGE_REFRESH_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [currentBranchId, location.search]);
+
+  const currentTab = new URLSearchParams(location.search).get('tab');
+  const isActive = (item) => {
+    if (item.to) return location.pathname === item.to;
+    if (location.pathname !== '/admin') return false;
+    return item.tab === null ? !currentTab || currentTab === 'dashboard' : currentTab === item.tab;
+  };
+
+  const groups = adminGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.superAdminOnly || isSuperAdmin),
+  }));
+  const activeGroup = groups.find((group) => group.items.some(isActive))?.label;
+
+  const [openGroup, setOpenGroup] = useState(activeGroup ?? groups[0].label);
+
+  useEffect(() => {
+    if (activeGroup) setOpenGroup(activeGroup);
+  }, [activeGroup]);
+
+  const badgeFor = (item) => (item.badge ? figures?.[item.badge] : 0);
+
+  function renderItem(item) {
+    return (
+      <SidebarButton
+        key={item.label}
+        item={item}
+        active={isActive(item)}
+        showLabels={showLabels}
+        badge={badgeFor(item)}
+        adminAccent
+        onClick={() => {
+          onNavigate();
+          if (item.to) navigate(item.to);
+          else navigate(item.tab === null ? '/admin' : `/admin?tab=${encodeURIComponent(item.tab)}`);
+        }}
+      />
+    );
+  }
+
+  return (
+    <>
+      {renderItem(dashboardItem)}
+
+      {groups.map((group) => {
+        const open = !showLabels || openGroup === group.label;
+        const hiddenCount = group.items.reduce((sum, item) => sum + (badgeFor(item) || 0), 0);
+
+        return (
+          <div key={group.label} className="mt-1.5">
+            {showLabels ? (
+              <button
+                type="button"
+                onClick={() => setOpenGroup(open ? null : group.label)}
+                aria-expanded={open}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 transition hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:text-slate-500 dark:hover:text-slate-300"
+              >
+                <span>{group.label}</span>
+                {!open && <CountBadge count={hiddenCount} />}
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition ${open ? 'rotate-180' : ''} ${!open && hiddenCount ? '' : 'ml-auto'}`} />
+              </button>
+            ) : (
+              <div className="mx-3 mb-2 h-px bg-slate-200 dark:bg-slate-800" />
+            )}
+
+            {open && (
+              <div className="space-y-0.5">
+                {group.items.map(renderItem)}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 export default function DashboardSidebar() {
   const { user, logout } = useAuth();
@@ -164,19 +279,9 @@ export default function DashboardSidebar() {
   const isAdmin = ADMIN_ROLES.includes(role);
   const isSuperAdmin = role === 'super_admin';
 
-  const visibleStaffItems = staffItems.filter(
-    (item) =>
-      (!item.adminOnly || isAdmin) &&
-      (!item.superAdminOnly || isSuperAdmin)
-  );
-
-  const generalStaffItems = visibleStaffItems.filter(
-    (item) => !item.adminOnly
-  );
-
-  const adminStaffItems = visibleStaffItems.filter(
-    (item) => item.adminOnly
-  );
+  // An admin on /staff is previewing the staff view, so they get its navigation.
+  const staffPreview = isAdmin && location.pathname === '/staff';
+  const adminView = isAdmin && !staffPreview;
 
   const firstName =
     user?.full_name?.trim()?.split(/\s+/)[0] ||
@@ -201,7 +306,7 @@ export default function DashboardSidebar() {
 
   function handleLogoNavigation() {
     closeMobileMenu();
-    navigate(isStaff ? '/staff' : '/dashboard');
+    navigate(workspacePath(role));
   }
 
   function handleStaffNavigation(tab) {
@@ -231,36 +336,21 @@ export default function DashboardSidebar() {
     return currentTab === tab;
   }
 
+  function isCustomerItemActive(to) {
+    const target = new URL(to, window.location.origin);
+
+    return (
+      location.pathname === target.pathname &&
+      new URLSearchParams(location.search).get('tab') ===
+        target.searchParams.get('tab')
+    );
+  }
+
   const sidebarWidth =
     collapsed && !mobileOpen ? 'md:w-20' : 'md:w-72';
 
-  function renderStaffItem(item) {
-    const Icon = item.icon;
-    const active = isStaffItemActive(item.tab);
-
-    return (
-      <button
-        key={item.label}
-        type="button"
-        onClick={() => handleStaffNavigation(item.tab)}
-        title={!showLabels ? item.label : undefined}
-        aria-current={active ? 'page' : undefined}
-        className={[
-          'group flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
-          showLabels ? 'gap-3' : 'justify-center',
-          active
-            ? 'bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-400'
-            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
-        ].join(' ')}
-      >
-        <Icon className="h-5 w-5 shrink-0" />
-
-        {showLabels && (
-          <span className="truncate">{item.label}</span>
-        )}
-      </button>
-    );
-  }
+  // Admins have the longest menu, so their bottom actions share one row.
+  const actionsInRow = adminView && showLabels;
 
   return (
     <>
@@ -381,61 +471,55 @@ export default function DashboardSidebar() {
 
         {/* Navigation */}
         <nav
-          className="flex-1 overflow-y-auto px-3 py-5"
-          aria-label={isStaff ? 'Staff workspace' : 'My account'}
+          className={`flex-1 overflow-y-auto px-3 ${adminView ? 'py-2' : 'py-5'}`}
+          aria-label={adminView ? 'Admin workspace' : isStaff ? 'Staff workspace' : 'My account'}
         >
-          {showLabels && (
+          {showLabels && !adminView && (
             <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-              {isStaff ? 'Staff Workspace' : 'My Account'}
+              {isStaff ? 'Operations' : 'My Account'}
             </p>
           )}
 
-          {isStaff ? (
-            <>
-              <div className="space-y-1">
-                {generalStaffItems.map(renderStaffItem)}
-              </div>
-
-              {adminStaffItems.length > 0 && (
-                <div className="mt-6">
-                  {showLabels && (
-                    <div className="mb-2 px-3">
-                      <div className="h-px bg-slate-200 dark:bg-slate-800" />
-
-                      <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                        Admin
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-1">
-                    {adminStaffItems.map(renderStaffItem)}
-                  </div>
-                </div>
-              )}
-            </>
+          {adminView ? (
+            <AdminNav
+              isSuperAdmin={isSuperAdmin}
+              showLabels={showLabels}
+              onNavigate={closeMobileMenu}
+            />
+          ) : isStaff ? (
+            <div className="space-y-1">
+              {staffItems.map((item) => (
+                <SidebarButton
+                  key={item.label}
+                  item={item}
+                  active={isStaffItemActive(item.tab)}
+                  showLabels={showLabels}
+                  onClick={() => handleStaffNavigation(item.tab)}
+                />
+              ))}
+            </div>
           ) : (
             <div className="space-y-1">
               {customerItems.map((item) => {
                 const Icon = item.icon;
+                const active = isCustomerItemActive(item.to);
 
                 return (
-                  <NavLink
+                  <Link
                     key={item.label}
                     to={item.to}
                     onClick={closeMobileMenu}
                     title={!showLabels ? item.label : undefined}
-                    className={({ isActive }) =>
-                      [
-                        'group flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
-                        showLabels
-                          ? 'gap-3'
-                          : 'justify-center',
-                        isActive
-                          ? 'bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-400'
-                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
-                      ].join(' ')
-                    }
+                    aria-current={active ? 'page' : undefined}
+                    className={[
+                      'group flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
+                      showLabels
+                        ? 'gap-3'
+                        : 'justify-center',
+                      active
+                        ? 'bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-400'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
+                    ].join(' ')}
                   >
                     <Icon className="h-5 w-5 shrink-0" />
 
@@ -444,7 +528,7 @@ export default function DashboardSidebar() {
                         {item.label}
                       </span>
                     )}
-                  </NavLink>
+                  </Link>
                 );
               })}
             </div>
@@ -452,38 +536,68 @@ export default function DashboardSidebar() {
         </nav>
 
         {/* Bottom actions */}
-        <div className="shrink-0 border-t border-slate-100 p-3 dark:border-slate-800">
-          <NavLink
-            to="/settings"
-            onClick={closeMobileMenu}
-            title={!showLabels ? 'Settings' : undefined}
-            className={({ isActive }) =>
-              [
-                'mb-1 flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
-                showLabels ? 'gap-3' : 'justify-center',
-                isActive
-                  ? 'bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-400'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
-              ].join(' ')
-            }
-          >
-            <Settings className="h-5 w-5 shrink-0" />
+        <div
+          className={[
+            'shrink-0 border-t border-slate-100 dark:border-slate-800',
+            actionsInRow ? 'flex items-center gap-1 p-2' : 'p-3',
+          ].join(' ')}
+        >
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                closeMobileMenu();
+                navigate(staffPreview ? '/admin' : '/staff');
+              }}
+              title={!showLabels ? (staffPreview ? 'Back to admin' : 'Open staff view') : undefined}
+              className={[
+                'flex items-center rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-violet-50 hover:text-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:text-slate-300 dark:hover:bg-violet-950/30 dark:hover:text-violet-300',
+                actionsInRow ? 'min-w-0 flex-1 gap-2 whitespace-nowrap' : 'mb-1 w-full',
+                !showLabels && 'justify-center',
+                showLabels && !actionsInRow && 'gap-3',
+              ].filter(Boolean).join(' ')}
+            >
+              <ArrowLeftRight className="h-5 w-5 shrink-0" />
 
-            {showLabels && <span>Settings</span>}
-          </NavLink>
+              {showLabels && <span>{staffPreview ? 'Back to admin' : 'Open staff view'}</span>}
+            </button>
+          )}
+
+          {!adminView && (
+            <NavLink
+              to="/settings"
+              onClick={closeMobileMenu}
+              title={!showLabels ? 'Settings' : undefined}
+              className={({ isActive }) =>
+                [
+                  'mb-1 flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
+                  showLabels ? 'gap-3' : 'justify-center',
+                  isActive
+                    ? 'bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-400'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
+                ].join(' ')
+              }
+            >
+              <Settings className="h-5 w-5 shrink-0" />
+
+              {showLabels && <span>Settings</span>}
+            </NavLink>
+          )}
 
           <button
             type="button"
             onClick={handleLogout}
-            title={!showLabels ? 'Log out' : undefined}
+            title={!showLabels || actionsInRow ? 'Log out' : undefined}
+            aria-label="Log out"
             className={[
-              'flex w-full items-center rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-red-50 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 dark:text-slate-300 dark:hover:bg-red-950/30 dark:hover:text-red-400',
+              'flex items-center rounded-xl py-2.5 text-sm font-medium text-slate-600 transition hover:bg-red-50 hover:text-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 dark:text-slate-300 dark:hover:bg-red-950/30 dark:hover:text-red-400',
+              actionsInRow ? 'shrink-0 px-2.5' : 'w-full px-3',
               showLabels ? 'gap-3' : 'justify-center',
             ].join(' ')}
           >
             <LogOut className="h-5 w-5 shrink-0" />
 
-            {showLabels && <span>Log out</span>}
+            {showLabels && !actionsInRow && <span>Log out</span>}
           </button>
 
           {/* Desktop collapse button */}
@@ -492,7 +606,10 @@ export default function DashboardSidebar() {
             onClick={() =>
               setCollapsed((value) => !value)
             }
-            className="mt-2 hidden w-full items-center justify-center rounded-xl border border-slate-200 py-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 md:flex"
+            className={[
+              'hidden items-center justify-center rounded-xl border border-slate-200 py-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 md:flex',
+              actionsInRow ? 'shrink-0 px-2' : 'mt-2 w-full',
+            ].join(' ')}
             aria-label={
               collapsed
                 ? 'Expand sidebar'

@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { generateUniqueUsername } = require('../utils/username');
+const { recordAudit } = require('../services/auditLog');
 
 const SALT_ROUNDS = 12;
 const STAFF_ROLES = ['laundry_staff', 'administrator'];
@@ -66,6 +67,13 @@ async function createStaff(req, res, next) {
        RETURNING id, email, username, full_name, phone_number, location_zone, role, branch_id, created_at`,
       [normalizedEmail, password_hash, full_name.trim(), phone_number.trim(), location_zone.trim(), role, staffBranchId, username]
     );
+
+    await recordAudit(req.user, {
+      action: 'staff.created',
+      entityType: 'user',
+      entityId: result.rows[0].id,
+      summary: `Created ${role} account for ${normalizedEmail}`,
+    });
 
     res.status(201).json({ staff: result.rows[0] });
   } catch (err) {

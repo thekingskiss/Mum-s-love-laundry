@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { recordAudit } = require('../services/auditLog');
 const { DIFFERENT_BRANCH_ERROR, canAccessBranch } = require('../utils/branchAccess');
 
 async function listExpenses(req, res, next) {
@@ -83,7 +84,7 @@ async function createExpense(req, res, next) {
 async function deleteExpense(req, res, next) {
   try {
     const { id } = req.params;
-    const expense = await pool.query('SELECT branch_id FROM expenses WHERE id = $1', [id]);
+    const expense = await pool.query('SELECT branch_id, category, amount, expense_date FROM expenses WHERE id = $1', [id]);
     if (expense.rows.length === 0) {
       return res.status(404).json({ error: 'Expense not found.' });
     }
@@ -91,6 +92,13 @@ async function deleteExpense(req, res, next) {
       return res.status(403).json({ error: DIFFERENT_BRANCH_ERROR });
     }
     await pool.query('DELETE FROM expenses WHERE id = $1', [id]);
+    const { category, amount } = expense.rows[0];
+    await recordAudit(req.user, {
+      action: 'expense.deleted',
+      entityType: 'expense',
+      entityId: id,
+      summary: `Deleted expense #${id}: ${category}, GHS ${amount}`,
+    });
     res.json({ message: 'Expense deleted.' });
   } catch (err) {
     next(err);

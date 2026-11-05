@@ -1,49 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bell, CheckCheck } from 'lucide-react';
-import api from '../api/axios';
 import { useAuth } from '../context/AuthContext.jsx';
-
-const POLL_INTERVAL_MS = 60_000;
-
-function timeAgo(dateString) {
-  const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
-  if (seconds < 60) return 'Just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateString).toLocaleDateString();
-}
+import { timeAgo, useNotifications } from '../lib/useNotifications';
 
 // Surfaces the in-app notifications the backend already writes on every
 // order status change, payment, and pickup-date assignment — previously
 // there was no UI for these at all, so they went completely unseen.
 export default function NotificationBell() {
   const { user } = useAuth();
+  const { notifications, unreadCount, loading, markRead, markAllRead } = useNotifications();
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
   const ref = useRef(null);
-
-  const unreadCount = notifications.filter((n) => !n.read_at).length;
-
-  function loadNotifications() {
-    api
-      .get('/notifications')
-      .then(({ data }) => setNotifications(data.notifications))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }
-
-  useEffect(() => {
-    if (!user) return undefined;
-    loadNotifications();
-    const interval = setInterval(loadNotifications, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [user]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -53,25 +21,6 @@ export default function NotificationBell() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [open]);
-
-  async function markRead(id) {
-    setNotifications((list) => list.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)));
-    try {
-      await api.patch(`/notifications/${id}/read`);
-    } catch {
-      loadNotifications();
-    }
-  }
-
-  async function markAllRead() {
-    const unread = notifications.filter((n) => !n.read_at);
-    setNotifications((list) => list.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
-    try {
-      await Promise.all(unread.map((n) => api.patch(`/notifications/${n.id}/read`)));
-    } catch {
-      loadNotifications();
-    }
-  }
 
   if (!user) return null;
 

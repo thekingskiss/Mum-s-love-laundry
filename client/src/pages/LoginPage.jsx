@@ -3,10 +3,9 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { STAFF_ROLES, workspacePath } from '../lib/roles';
 import mllLogo from '../assets/mll-logo.png';
 import loginBgImage from '../assets/login-bg-laundromat.jpg';
-
-const STAFF_ROLES = ['laundry_staff', 'administrator', 'super_admin'];
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -30,7 +29,7 @@ export default function LoginPage() {
       const loggedInUser = await login(form.email, form.password);
 
       const destination = STAFF_ROLES.includes(loggedInUser?.role)
-        ? '/staff'
+        ? workspacePath(loggedInUser.role)
         : location.state?.from || '/dashboard';
 
       navigate(destination, { replace: true });

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const pool = require('../config/db');
 const { notifyUser } = require('../services/notify');
+const { recordAudit } = require('../services/auditLog');
 const { DIFFERENT_BRANCH_ERROR, canAccessBranch, canViewOrder } = require('../utils/branchAccess');
 const { NET_PAID_EXPR } = require('./paymentController');
 const { finalizePaystackPayment } = require('./paystackController');
@@ -498,6 +499,12 @@ async function voidInvoice(req, res, next) {
     );
 
     await client.query('COMMIT');
+    await recordAudit(req.user, {
+      action: 'invoice.voided',
+      entityType: 'invoice',
+      entityId: id,
+      summary: `Voided invoice #${id} for order #${invoice.order_id}`,
+    });
     res.json({ message: 'Invoice voided.' });
   } catch (err) {
     await client.query('ROLLBACK');

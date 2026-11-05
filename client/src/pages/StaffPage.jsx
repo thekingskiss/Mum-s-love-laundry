@@ -14,6 +14,8 @@ import {
   ChevronUp,
   ClipboardList,
   FileText,
+  History,
+  Home,
   Loader2,
   Mail,
   MapPin,
@@ -39,11 +41,13 @@ import StatusPill from '../components/StatusPill.jsx';
 import PaymentStatusPill from '../components/PaymentStatusPill.jsx';
 import InvoiceStatusPill from '../components/InvoiceStatusPill.jsx';
 import AnimatedNumber from '../components/AnimatedNumber.jsx';
+import AdminOverview from '../components/AdminOverview.jsx';
+import AuditLogTab from '../components/AuditLogTab.jsx';
+import { ADMIN_ROLES } from '../lib/roles';
 import { getAllowedTransitions, STATUS_LABELS, STORAGE_LOCATIONS } from '../lib/orderLifecycle';
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, PAYMENT_TYPES, PAYMENT_TYPE_LABELS, suggestPaymentType } from '../lib/payments';
 import { INVOICE_STATUS_LABELS } from '../lib/invoices';
-
-const ADMIN_ROLES = ['administrator', 'super_admin'];
+import { summarizeOrders } from '../lib/staffOverview';
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -59,7 +63,8 @@ function priceLabel(item) {
 }
 
 const TABS = [
-  { key: 'orders', label: 'Order Queue', icon: ClipboardList, adminOnly: false },
+  { key: 'dashboard', label: 'Dashboard', icon: Home, adminOnly: false },
+  { key: 'orders', label: 'Orders', icon: ClipboardList, adminOnly: false },
   { key: 'customers', label: 'Customers', icon: BookUser, adminOnly: false },
   { key: 'messages', label: 'Messages', icon: Mail, adminOnly: false },
   { key: 'pickups', label: 'Scheduled Pickups', icon: CalendarCheck, adminOnly: true },
@@ -68,15 +73,23 @@ const TABS = [
   { key: 'invoices', label: 'Invoices', icon: FileText, adminOnly: false },
   { key: 'inventory', label: 'Inventory', icon: Boxes, adminOnly: true },
   { key: 'expenses', label: 'Expenses', icon: Receipt, adminOnly: true },
-  { key: 'staff', label: 'Staff', icon: Users, adminOnly: true },
+  { key: 'staff', label: 'Staff accounts', icon: Users, adminOnly: true, superAdminOnly: true },
   { key: 'branches', label: 'Branches', icon: Building2, adminOnly: true, superAdminOnly: true },
   { key: 'zones', label: 'Zones', icon: MapPin, adminOnly: true },
   { key: 'pricing', label: 'Pricing', icon: Percent, adminOnly: true },
   { key: 'capacity', label: 'Capacity', icon: CalendarDays, adminOnly: true },
+  { key: 'audit', label: 'Audit log', icon: History, adminOnly: true, superAdminOnly: true },
 ];
 
 export default function StaffPage() {
+  return <Workspace area="staff" />;
+}
+
+// The tabs shared by the staff and admin workspaces. An admin on /staff is
+// previewing the staff view, so they get what laundry staff get there.
+export function Workspace({ area }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const {
     branches,
     currentBranchId,
@@ -84,60 +97,61 @@ export default function StaffPage() {
     isSuperAdmin,
   } = useBranch();
 
-  const isAdmin = ADMIN_ROLES.includes(user.role);
+  const isAdmin = area === 'admin';
+  const staffPreview = !isAdmin && ADMIN_ROLES.includes(user.role);
+  const tabUser = staffPreview ? { ...user, role: 'laundry_staff' } : user;
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const urlTab = searchParams.get('tab');
+  const requestedTab = searchParams.get('tab');
+  const requestedTabConfig = TABS.find((item) => item.key === requestedTab);
+  const canAccessTab = (config, inAdminArea) =>
+    Boolean(config) &&
+    (!config.adminOnly || inAdminArea) &&
+    (!config.superAdminOnly || isSuperAdmin);
 
-  const [tab, setTab] = useState(urlTab || 'orders');
-
-  const visibleTabs = TABS.filter(
-    (t) =>
-      (!t.adminOnly || isAdmin) &&
-      (!t.superAdminOnly || isSuperAdmin)
-  );
+  const canOpenRequestedTab = canAccessTab(requestedTabConfig, isAdmin);
+  const tab = canOpenRequestedTab ? requestedTab : 'dashboard';
 
   useEffect(() => {
-    const requestedTab = searchParams.get('tab');
+    if (!requestedTab || canOpenRequestedTab) return;
 
-    if (!requestedTab) {
-      setTab('orders');
-      return;
-    }
-
-    const requestedTabConfig = TABS.find(
-      (item) => item.key === requestedTab
-    );
-
-    const canAccessTab =
-      requestedTabConfig &&
-      (!requestedTabConfig.adminOnly || isAdmin) &&
-      (!requestedTabConfig.superAdminOnly || isSuperAdmin);
-
-    if (canAccessTab) {
-      setTab(requestedTab);
+    // Links saved before /admin existed, like /staff?tab=analytics.
+    if (staffPreview && canAccessTab(requestedTabConfig, true)) {
+      navigate(`/admin?tab=${requestedTab}`, { replace: true });
     } else {
-      setTab('orders');
       setSearchParams({}, { replace: true });
     }
-  }, [searchParams, isAdmin, isSuperAdmin, setSearchParams]);
-
-  function handleTabChange(nextTab) {
-    setTab(nextTab);
-    setSearchParams(
-      { tab: nextTab },
-      { replace: true }
-    );
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTab, canOpenRequestedTab, staffPreview, isSuperAdmin]);
 
    return (
     <div className="w-full px-4 pb-16 pt-6 sm:px-6 md:px-0 md:pt-2">
+      {staffPreview && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-900 dark:bg-violet-950/30">
+          <p className="text-sm text-violet-900 dark:text-violet-200">
+            <span className="font-semibold">You're previewing the staff view.</span> Anything you change here is real.
+            Figures still cover your own access, not one staff member's.
+          </p>
+          <Link to="/admin" className="text-sm font-semibold text-violet-700 hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100">
+            Back to admin
+          </Link>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-semibold text-ink-900">
-  Staff Dashboard
-</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="font-display text-3xl font-semibold text-ink-900 dark:text-white">
+              {TABS.find((item) => item.key === tab).label}
+            </h1>
+
+            {isAdmin && (
+              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+                {STAFF_ROLE_LABELS[user.role]}
+              </span>
+            )}
+          </div>
 
           <p className="mt-2 text-slate-500 dark:text-slate-400">
             Signed in as {user.full_name} {'\u00B7'}{' '}
@@ -151,8 +165,8 @@ export default function StaffPage() {
             onChange={(e) =>
               setCurrentBranchId(e.target.value)
             }
-            title="Filter the Order Queue, Invoices, Payments, and Analytics tabs by branch"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            title="Filter the Dashboard, Order Queue, Scheduled Pickups, Invoices, Payments, and Analytics tabs by branch"
+            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 shadow-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
           >
             <option value="">All Branches</option>
 
@@ -179,8 +193,12 @@ export default function StaffPage() {
                 ease: 'easeOut',
               }}
             >
+              {tab === 'dashboard' && (
+                isAdmin ? <AdminOverview /> : <DashboardTab />
+              )}
+
               {tab === 'orders' && (
-                <OrderQueueTab user={user} />
+                <OrderQueueTab user={tabUser} />
               )}
 
               {tab === 'customers' && (
@@ -215,12 +233,16 @@ export default function StaffPage() {
                 <ExpensesTab />
               )}
 
-              {tab === 'staff' && isAdmin && (
+              {tab === 'staff' && isAdmin && isSuperAdmin && (
                 <StaffTab user={user} />
               )}
 
-              {tab === 'branches' && isSuperAdmin && (
+              {tab === 'branches' && isAdmin && isSuperAdmin && (
                 <BranchesTab />
+              )}
+
+              {tab === 'audit' && isAdmin && isSuperAdmin && (
+                <AuditLogTab />
               )}
 
               {tab === 'zones' && isAdmin && (
@@ -247,6 +269,178 @@ const STAFF_ROLE_LABELS = {
   administrator: 'Administrator',
   super_admin: 'Super Admin',
 };
+
+const ORDERS_TAB_PATH = '/staff?tab=orders';
+// GET /orders returns at most this many orders, newest first.
+const ORDER_LIST_CAP = 200;
+
+function OverviewCard({ icon: Icon, label, value, detail, tone = 'default' }) {
+  const urgent = tone === 'urgent';
+  return (
+    <Link
+      to={ORDERS_TAB_PATH}
+      className="rounded-2xl border border-slate-100 bg-white p-5 shadow-soft transition hover:border-brand-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:border-slate-700 dark:bg-slate-800"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
+        <Icon size={18} className={urgent ? 'text-red-500' : 'text-slate-400'} />
+      </div>
+      <p className={`mt-3 font-display text-3xl font-semibold ${urgent ? 'text-red-600 dark:text-red-400' : 'text-ink-900 dark:text-white'}`}>
+        {value}
+      </p>
+      <p className="mt-1 min-h-4 text-xs text-slate-400">{detail}</p>
+    </Link>
+  );
+}
+
+function OverviewOrderRow({ order, children }) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 py-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-ink-900 dark:text-white">
+          #{order.id} — {order.customer_name}
+        </p>
+        <p className="mt-0.5 text-xs text-slate-400">{children}</p>
+      </div>
+      <StatusPill status={order.status} />
+    </li>
+  );
+}
+
+function DashboardTab() {
+  const { formatPrice } = useCurrency();
+  const { currentBranchId } = useBranch();
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    loadOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBranchId]);
+
+  function loadOrders() {
+    setLoading(true);
+    setError('');
+    return api
+      .get('/orders', { params: { branch_id: currentBranchId || undefined } })
+      .then(({ data }) => setOrders(data.orders))
+      .catch(() => setError('Unable to load the overview.'))
+      .finally(() => setLoading(false));
+  }
+
+  const today = todayISO();
+  const summary = useMemo(() => summarizeOrders(orders, today), [orders, today]);
+  const busiestStage = Math.max(1, ...summary.stages.map((stage) => stage.count));
+  const panelClass = 'rounded-2xl border border-slate-100 bg-white p-5 shadow-soft dark:border-slate-700 dark:bg-slate-800';
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-lg text-ink-900 dark:text-white">Overview</h2>
+        <button onClick={loadOrders} className="text-sm font-semibold text-brand-600 hover:text-brand-700">
+          Refresh
+        </button>
+      </div>
+
+      {error && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+
+      {loading && (
+        <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label="Loading overview">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-32 animate-pulse rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800" />
+          ))}
+        </div>
+      )}
+
+      {!loading && !error && (
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <OverviewCard icon={ClipboardList} label="Active orders" value={summary.activeCount} detail="Not yet collected" />
+            <OverviewCard icon={CheckCircle2} label="Ready for pickup" value={summary.readyCount} detail="Waiting for the customer" />
+            <OverviewCard
+              icon={AlertTriangle}
+              label="Overdue pickups"
+              value={summary.overdueCount}
+              detail={`${summary.dueTodayCount} more due today`}
+              tone={summary.overdueCount > 0 ? 'urgent' : 'default'}
+            />
+            <OverviewCard
+              icon={Wallet}
+              label="Awaiting payment"
+              value={summary.owingCount}
+              detail={`${formatPrice(summary.owingTotal)} outstanding`}
+            />
+          </div>
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <section className={panelClass}>
+              <h3 className="font-semibold text-ink-900 dark:text-white">Orders by stage</h3>
+              <ul className="mt-4 space-y-3">
+                {summary.stages.map((stage) => (
+                  <li key={stage.status}>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600 dark:text-slate-300">{STATUS_LABELS[stage.status]}</span>
+                      <span className="font-semibold text-ink-900 dark:text-white">{stage.count}</span>
+                    </div>
+                    <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-700">
+                      <div
+                        className="h-1.5 rounded-full bg-brand-500"
+                        style={{ width: `${(stage.count / busiestStage) * 100}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section className={panelClass}>
+              <h3 className="font-semibold text-ink-900 dark:text-white">Pickups to follow up</h3>
+              {summary.pickups.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Nothing overdue or due today.</p>
+              ) : (
+                <ul className="mt-1 divide-y divide-slate-100 dark:divide-slate-700">
+                  {summary.pickups.map((order) => (
+                    <OverviewOrderRow key={order.id} order={order}>
+                      Pickup {order.pickup_date.slice(0, 10)} · {order.customer_phone}
+                    </OverviewOrderRow>
+                  ))}
+                </ul>
+              )}
+              {summary.morePickups > 0 && (
+                <p className="mt-2 text-xs text-slate-400">and {summary.morePickups} more in the order queue</p>
+              )}
+            </section>
+          </div>
+
+          <section className={`mt-6 ${panelClass}`}>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-semibold text-ink-900 dark:text-white">Latest orders</h3>
+              <Link to={ORDERS_TAB_PATH} className="text-sm font-semibold text-brand-600 hover:text-brand-700">
+                View all orders
+              </Link>
+            </div>
+            {summary.recent.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">No orders yet.</p>
+            ) : (
+              <ul className="mt-1 divide-y divide-slate-100 dark:divide-slate-700">
+                {summary.recent.map((order) => (
+                  <OverviewOrderRow key={order.id} order={order}>
+                    {order.branch_name} · Drop-off {order.drop_off_date?.slice(0, 10)} · {formatPrice(order.total_price)}
+                  </OverviewOrderRow>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {orders.length >= ORDER_LIST_CAP && (
+            <p className="mt-4 text-xs text-slate-400">Figures cover the latest {ORDER_LIST_CAP} orders.</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 function CustomersTab() {
   const { formatPrice } = useCurrency();
@@ -389,19 +583,21 @@ function CustomersTab() {
 
 function ScheduledPickupsTab() {
   const { formatPrice } = useCurrency();
+  const { currentBranchId } = useBranch();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     loadOrders();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBranchId]);
 
   function loadOrders() {
     setLoading(true);
     setError('');
     api
-      .get('/orders')
+      .get('/orders', { params: { branch_id: currentBranchId || undefined } })
       .then(({ data }) => setOrders(data.orders))
       .catch(() => setError('Unable to load scheduled pickups.'))
       .finally(() => setLoading(false));
@@ -787,7 +983,7 @@ function OrderQueueTab({ user }) {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm outline-none transition-colors focus:border-brand-400"
+          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm outline-none transition-colors focus:border-brand-400"
         >
           <option value="">All statuses</option>
           {Object.entries(STATUS_LABELS).map(([value, label]) => (
@@ -825,7 +1021,7 @@ function OrderQueueTab({ user }) {
           const garments = garmentsByOrder[order.id];
 
           return (
-            <div key={order.id} className="rounded-2xl border border-slate-100 bg-white p-6 shadow-soft">
+            <div key={order.id} className="rounded-2xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-soft">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <input
@@ -836,7 +1032,7 @@ function OrderQueueTab({ user }) {
                     className="mt-1 h-4 w-4 accent-brand-500"
                   />
                   <div>
-                    <p className="font-semibold text-ink-900">
+                    <p className="font-semibold text-ink-900 dark:text-white">
                       #{order.id} · {order.items_summary || `${order.item_count} item(s)`} — {order.customer_name}
                     </p>
                   <p className="mt-1 text-xs text-slate-400">
@@ -881,7 +1077,7 @@ function OrderQueueTab({ user }) {
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="mt-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700"
+                  className="mt-3 flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs font-semibold text-amber-700"
                 >
                   <AlertTriangle size={14} /> {order.days_overdue} day{order.days_overdue === 1 ? '' : 's'} overdue —
                   GHS {order.late_fee.toFixed(2)} storage fee accrued
@@ -889,10 +1085,10 @@ function OrderQueueTab({ user }) {
                 </motion.div>
               )}
 
-              {order.notes && <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">Note: {order.notes}</p>}
+              {order.notes && <p className="mt-3 rounded-lg bg-slate-50 dark:bg-slate-900 p-3 text-sm text-slate-600 dark:text-slate-300">Note: {order.notes}</p>}
 
               {!['completed', 'cancelled'].includes(order.status) && (
-                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-200 p-3">
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 p-3">
                   <CalendarDays size={15} className="text-slate-400" />
                   <span className="text-xs font-semibold text-slate-500">
                     {order.pickup_date ? 'Update pickup date:' : 'Assign a pickup date:'}
@@ -905,7 +1101,7 @@ function OrderQueueTab({ user }) {
                       setPickupSavedId((id) => (id === order.id ? null : id));
                       setPickupDraft((d) => ({ ...d, [order.id]: e.target.value }));
                     }}
-                    className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none transition-colors focus:border-brand-400"
+                    className="rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-xs outline-none transition-colors focus:border-brand-400"
                   />
                   <button
                     onClick={() => assignPickupDate(order.id)}
@@ -927,7 +1123,7 @@ function OrderQueueTab({ user }) {
               )}
 
               {order.status === 'ready_for_pickup' && (
-                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-200 p-3">
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 p-3">
                   <MapPin size={15} className="text-slate-400" />
                   <span className="text-xs font-semibold text-slate-500">
                     {order.storage_location ? 'Move to:' : 'Place in storage:'}
@@ -940,7 +1136,7 @@ function OrderQueueTab({ user }) {
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:cursor-default ${
                         order.storage_location === loc
                           ? 'bg-indigo-500 text-white'
-                          : 'border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
+                          : 'border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-indigo-300 hover:text-indigo-600'
                       }`}
                     >
                       {loc}
@@ -950,7 +1146,7 @@ function OrderQueueTab({ user }) {
                   <button
                     onClick={() => window.open(`/orders/${order.id}/tag`, '_blank', 'noopener,noreferrer')}
                     title="Print a shelf tag with this customer's name, phone, and storage location"
-                    className="ml-auto flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+                    className="ml-auto flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-indigo-300 hover:text-indigo-600"
                   >
                     <Printer size={13} /> Print Tag
                   </button>
@@ -963,7 +1159,7 @@ function OrderQueueTab({ user }) {
                     value={notesDraft[order.id] || ''}
                     onChange={(e) => setNotesDraft((d) => ({ ...d, [order.id]: e.target.value }))}
                     placeholder="Add a note (optional)"
-                    className="min-w-[10rem] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400"
+                    className="min-w-[10rem] flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400"
                   />
                   {nextOptions.map((next) => (
                     <button
@@ -999,13 +1195,13 @@ function OrderQueueTab({ user }) {
               </div>
 
               {expandedPayments === order.id && (
-                <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-4">
+                <div className="mt-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-4">
                   {(paymentsByOrder[order.id] || []).length === 0 && (
                     <p className="text-xs text-slate-400">No payments recorded yet.</p>
                   )}
                   <ul className="space-y-1">
                     {(paymentsByOrder[order.id] || []).map((p) => (
-                      <li key={p.id} className="flex items-center justify-between text-xs text-slate-600">
+                      <li key={p.id} className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
                         <span>
                           {new Date(p.paid_at).toLocaleDateString()} — {PAYMENT_TYPE_LABELS[p.payment_type] || p.payment_type}
                           {' '}({PAYMENT_METHOD_LABELS[p.payment_method] || p.payment_method})
@@ -1019,7 +1215,7 @@ function OrderQueueTab({ user }) {
                   </ul>
 
                   {!['cancelled'].includes(order.status) && (
-                    <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-slate-200 pt-3">
+                    <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-slate-200 dark:border-slate-700 pt-3">
                       <div>
                         <label className="block text-[10px] font-semibold uppercase tracking-widest text-slate-400">Amount</label>
                         <input
@@ -1031,7 +1227,7 @@ function OrderQueueTab({ user }) {
                           onChange={(e) =>
                             setPaymentForm((f) => ({ ...f, [order.id]: { ...paymentDraftFor(order), amount: e.target.value } }))
                           }
-                          className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-xs outline-none focus:border-brand-400"
+                          className="w-24 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-xs outline-none focus:border-brand-400"
                         />
                       </div>
                       <div>
@@ -1041,7 +1237,7 @@ function OrderQueueTab({ user }) {
                           onChange={(e) =>
                             setPaymentForm((f) => ({ ...f, [order.id]: { ...paymentDraftFor(order), payment_method: e.target.value } }))
                           }
-                          className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-brand-400"
+                          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs outline-none focus:border-brand-400"
                         >
                           {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                         </select>
@@ -1053,7 +1249,7 @@ function OrderQueueTab({ user }) {
                           onChange={(e) =>
                             setPaymentForm((f) => ({ ...f, [order.id]: { ...paymentDraftFor(order), payment_type: e.target.value } }))
                           }
-                          className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-brand-400"
+                          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs outline-none focus:border-brand-400"
                         >
                           {PAYMENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
@@ -1082,7 +1278,7 @@ function OrderQueueTab({ user }) {
                         onClick={() => viewOrGenerateInvoice(order.id)}
                         disabled={invoiceBusyId === order.id}
                         title="View or generate this order's invoice"
-                        className="flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        className="flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 disabled:opacity-50"
                       >
                         <FileText size={13} /> {invoiceBusyId === order.id ? 'Opening...' : 'Invoice'}
                       </button>
@@ -1092,11 +1288,11 @@ function OrderQueueTab({ user }) {
               )}
 
               {expandedOrder === order.id && (
-                <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-4">
+                <div className="mt-3 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-4">
                   {(garments || []).length === 0 && <p className="text-xs text-slate-400">No garment tags yet.</p>}
                   <ul className="space-y-1">
                     {(garments || []).map((g) => (
-                      <li key={g.id} className="flex items-center justify-between text-xs text-slate-600">
+                      <li key={g.id} className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
                         <span>{g.tag_code} — {g.description || 'Untitled item'}</span>
                         <span className="text-slate-400">{g.status}</span>
                       </li>
@@ -1116,7 +1312,7 @@ function OrderQueueTab({ user }) {
                     <input
                       name="description"
                       placeholder="e.g. Blue cotton shirt"
-                      className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none transition-colors focus:border-brand-400"
+                      className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs outline-none transition-colors focus:border-brand-400"
                     />
                     <button type="submit" className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-600">
                       <Plus size={13} />
@@ -1504,12 +1700,12 @@ function StaffTab() {
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
       <div className="lg:col-span-2">
-        <h2 className="font-display text-lg text-ink-900">Staff Accounts</h2>
+        <h2 className="font-display text-lg text-ink-900 dark:text-white">Staff Accounts</h2>
         {loading && <p className="mt-3 text-sm text-slate-500">Loading...</p>}
-        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-soft">
+        <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Role</th>
@@ -1517,16 +1713,16 @@ function StaffTab() {
                   <th className="px-4 py-3 font-medium">Zone</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {staff.map((s) => (
                   <tr key={s.id}>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-ink-900">{s.full_name}</p>
+                      <p className="font-medium text-ink-900 dark:text-white">{s.full_name}</p>
                       <p className="text-xs text-slate-400">{s.email}</p>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{STAFF_ROLE_LABELS[s.role] || s.role}</td>
-                    <td className="px-4 py-3 text-slate-600">{s.branch_name || '—'}</td>
-                    <td className="px-4 py-3 text-slate-600">{s.location_zone}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{STAFF_ROLE_LABELS[s.role] || s.role}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{s.branch_name || '—'}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{s.location_zone}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1536,23 +1732,23 @@ function StaffTab() {
       </div>
 
       <div>
-        <h2 className="font-display text-lg text-ink-900">Add Staff</h2>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-3 rounded-2xl border border-slate-100 bg-white p-5 shadow-soft">
-          <input required placeholder="Full name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
-          <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
-          <input required placeholder="Phone number" value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
-          <input required placeholder="Location zone" value={form.location_zone} onChange={(e) => setForm({ ...form, location_zone: e.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
-          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400">
+        <h2 className="font-display text-lg text-ink-900 dark:text-white">Add Staff</h2>
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3 rounded-2xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-soft">
+          <input required placeholder="Full name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
+          <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
+          <input required placeholder="Phone number" value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value })} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
+          <input required placeholder="Location zone" value={form.location_zone} onChange={(e) => setForm({ ...form, location_zone: e.target.value })} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
+          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400">
             <option value="laundry_staff">Laundry Staff</option>
             <option value="administrator">Administrator</option>
           </select>
           {isSuperAdmin && (
-            <select required value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400">
+            <select required value={form.branch_id} onChange={(e) => setForm({ ...form, branch_id: e.target.value })} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400">
               <option value="">Assign to branch...</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           )}
-          <input required type="password" minLength={8} placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
+          <input required type="password" minLength={8} placeholder="Temporary password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
           <button type="submit" disabled={submitting} className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60">
             {submitting && <Loader2 size={14} className="animate-spin" />} Create Account
@@ -1599,7 +1795,7 @@ function ZonesTab() {
 
   return (
     <div>
-      <h2 className="font-display text-lg text-ink-900">Customer Areas</h2>
+      <h2 className="font-display text-lg text-ink-900 dark:text-white">Customer Areas</h2>
       <p className="mt-1 text-sm text-slate-500">
         Informational only — the towns customers register from. Doesn't affect drop-off since customers bring
         laundry in themselves.
@@ -1607,23 +1803,23 @@ function ZonesTab() {
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
       <form onSubmit={addZone} className="mt-4 flex max-w-md gap-2">
-        <input value={newZone} onChange={(e) => setNewZone(e.target.value)} placeholder="New area name" className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
+        <input value={newZone} onChange={(e) => setNewZone(e.target.value)} placeholder="New area name" className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
         <button type="submit" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">Add</button>
       </form>
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-soft">
+      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3 font-medium">Area</th>
                 <th className="px-4 py-3 font-medium">Active</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {zones.map((z) => (
                 <tr key={z.id}>
-                  <td className="px-4 py-3 font-medium text-ink-900">{z.zone_name}</td>
+                  <td className="px-4 py-3 font-medium text-ink-900 dark:text-white">{z.zone_name}</td>
                   <td className="px-4 py-3">
                     <input type="checkbox" checked={z.is_active} onChange={(e) => toggle(z.id, 'is_active', e.target.checked)} className="h-4 w-4 accent-brand-500" />
                   </td>
@@ -1763,179 +1959,336 @@ function BranchesTab() {
   );
 }
 
+const PRICE_FIELD_LABEL = 'block text-xs font-semibold text-slate-600 dark:text-slate-300';
+const PRICE_FIELD_INPUT =
+  'mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal text-ink-900 outline-none transition-colors focus:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
+const NEW_PRICE_ITEM = { item_name: '', category: '', mode: 'fixed', unit_price: '', price_min: '', price_max: '' };
+
+function priceItemDraft(item) {
+  return {
+    item_name: item.item_name,
+    category: item.category,
+    mode: item.unit_price != null ? 'fixed' : 'range',
+    unit_price: item.unit_price ?? '',
+    price_min: item.price_min ?? '',
+    price_max: item.price_max ?? '',
+  };
+}
+
+function priceItemPayload(draft) {
+  const details = { item_name: draft.item_name.trim(), category: draft.category.trim() };
+  return draft.mode === 'fixed'
+    ? { ...details, unit_price: Number(draft.unit_price) }
+    : { ...details, price_min: Number(draft.price_min), price_max: Number(draft.price_max) };
+}
+
+function PriceItemFields({ draft, onChange }) {
+  const set = (patch) => onChange({ ...draft, ...patch });
+  const priceInput = (label, field) => (
+    <label className={PRICE_FIELD_LABEL}>
+      {label}
+      <input
+        required
+        type="number"
+        min="0.01"
+        step="0.01"
+        value={draft[field]}
+        onChange={(e) => set({ [field]: e.target.value })}
+        className={PRICE_FIELD_INPUT}
+      />
+    </label>
+  );
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <label className={PRICE_FIELD_LABEL}>
+        Item name
+        <input
+          required
+          maxLength={150}
+          value={draft.item_name}
+          onChange={(e) => set({ item_name: e.target.value })}
+          className={PRICE_FIELD_INPUT}
+        />
+      </label>
+      <label className={PRICE_FIELD_LABEL}>
+        Category
+        <input
+          required
+          maxLength={100}
+          list="price-list-categories"
+          value={draft.category}
+          onChange={(e) => set({ category: e.target.value })}
+          className={PRICE_FIELD_INPUT}
+        />
+      </label>
+      <label className={PRICE_FIELD_LABEL}>
+        Pricing
+        <select
+          value={draft.mode}
+          onChange={(e) => set({ mode: e.target.value })}
+          className={PRICE_FIELD_INPUT}
+        >
+          <option value="fixed">Fixed price</option>
+          <option value="range">Price range</option>
+        </select>
+      </label>
+      {draft.mode === 'fixed' ? (
+        priceInput('Price (GHS)', 'unit_price')
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {priceInput('Min (GHS)', 'price_min')}
+          {priceInput('Max (GHS)', 'price_max')}
+        </div>
+      )}
+      {draft.mode === 'range' && (
+        <p className="text-xs text-slate-500 dark:text-slate-400 sm:col-span-2 lg:col-span-4">
+          Orders use the minimum as an estimate until the price is confirmed at drop-off.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function PricingTab() {
+  const toast = useToast();
   const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [drafts, setDrafts] = useState({});
-  const [savingId, setSavingId] = useState(null);
-  const [newItem, setNewItem] = useState({ category: '', item_name: '', unit_price: '' });
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState(NEW_PRICE_ITEM);
+  const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [newItem, setNewItem] = useState(NEW_PRICE_ITEM);
 
   useEffect(() => {
     loadItems();
   }, []);
 
   function loadItems() {
-    api.get('/admin/items').then(({ data }) => setItems(data.items)).catch(() => setError('Unable to load the price list.'));
+    return api
+      .get('/admin/items')
+      .then(({ data }) => {
+        setItems(data.items);
+        setError('');
+      })
+      .catch(() => setError('Unable to load the price list.'))
+      .finally(() => setLoading(false));
   }
 
-  function draftFor(item) {
-    if (drafts[item.id]) return drafts[item.id];
-    return item.unit_price != null
-      ? { mode: 'fixed', unit_price: item.unit_price, price_min: '', price_max: '' }
-      : { mode: 'range', unit_price: '', price_min: item.price_min, price_max: item.price_max };
+  function startEditing(item) {
+    setEditingId(item.id);
+    setEditDraft(priceItemDraft(item));
   }
 
-  function updateDraft(id, item, patch) {
-    setDrafts((d) => ({ ...d, [id]: { ...draftFor(item), ...patch } }));
-  }
-
-  async function saveItem(item) {
-    const draft = draftFor(item);
-    setSavingId(item.id);
-    setError('');
+  async function saveEdit(e, item) {
+    e.preventDefault();
+    setSaving(true);
     try {
-      const payload =
-        draft.mode === 'fixed'
-          ? { unit_price: draft.unit_price }
-          : { price_min: draft.price_min, price_max: draft.price_max };
-      await api.patch(`/admin/items/${item.id}`, payload);
-      loadItems();
+      const { data } = await api.patch(`/admin/items/${item.id}`, priceItemPayload(editDraft));
+      setEditingId(null);
+      toast.success(`${data.item.item_name} saved.`);
+      await loadItems();
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to update that price.');
+      toast.error(err.response?.data?.error || 'Unable to save that item.');
     } finally {
-      setSavingId(null);
+      setSaving(false);
     }
   }
 
   async function toggleActive(item) {
+    setTogglingId(item.id);
     try {
       await api.patch(`/admin/items/${item.id}`, { is_active: !item.is_active });
-      loadItems();
+      toast.success(`${item.item_name} ${item.is_active ? 'deactivated' : 'activated'}.`);
+      await loadItems();
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to update that item.');
+      toast.error(err.response?.data?.error || 'Unable to update that item.');
+    } finally {
+      setTogglingId(null);
     }
   }
 
   async function addItem(e) {
     e.preventDefault();
-    if (!newItem.category.trim() || !newItem.item_name.trim() || !newItem.unit_price) return;
+    setSaving(true);
     try {
-      await api.post('/admin/items', { ...newItem, unit_price: Number(newItem.unit_price) });
-      setNewItem({ category: '', item_name: '', unit_price: '' });
-      loadItems();
+      const { data } = await api.post('/admin/items', priceItemPayload(newItem));
+      setNewItem(NEW_PRICE_ITEM);
+      setAdding(false);
+      toast.success(`${data.item.item_name} added.`);
+      await loadItems();
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to add that item.');
+      toast.error(err.response?.data?.error || 'Unable to add that item.');
+    } finally {
+      setSaving(false);
     }
   }
 
-  const grouped = items
-    .filter((i) => i.item_name.toLowerCase().includes(search.toLowerCase()))
-    .reduce((groups, item) => {
-      groups[item.category] = groups[item.category] || [];
-      groups[item.category].push(item);
-      return groups;
-    }, {});
+  const activeCount = items.filter((item) => item.is_active).length;
+  const categories = [...new Set(items.map((item) => item.category))];
+  const query = search.trim().toLowerCase();
+  const visibleItems = items.filter((item) => {
+    if (statusFilter === 'active' && !item.is_active) return false;
+    if (statusFilter === 'inactive' && item.is_active) return false;
+    return !query || `${item.item_name} ${item.category}`.toLowerCase().includes(query);
+  });
+  const grouped = visibleItems.reduce((groups, item) => {
+    groups[item.category] = groups[item.category] || [];
+    groups[item.category].push(item);
+    return groups;
+  }, {});
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-lg text-ink-900">Price List ({items.length} items)</h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg text-ink-900 dark:text-white">Price list</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {!loading && !error && `${items.length} items, ${activeCount} active. `}
+            Prices apply to every branch. Orders already placed keep their original price.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAdding((open) => !open)}
+          aria-expanded={adding}
+          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600"
+        >
+          {adding ? 'Close' : 'Add item'}
+        </button>
+      </div>
+
+      <datalist id="price-list-categories">
+        {categories.map((category) => (
+          <option key={category} value={category} />
+        ))}
+      </datalist>
+
+      {adding && (
+        <form onSubmit={addItem} className="mt-4 space-y-3 rounded-2xl border border-dashed border-slate-300 p-4 dark:border-slate-600">
+          <PriceItemFields draft={newItem} onChange={setNewItem} />
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
+          >
+            Add to price list
+          </button>
+        </form>
+      )}
+
+      <div className="mt-4 flex flex-wrap gap-2">
         <input
+          aria-label="Search the price list"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search items..."
-          className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400"
+          placeholder="Search items or categories..."
+          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white sm:max-w-xs"
         />
+        <select
+          aria-label="Filter by status"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+        >
+          <option value="all">All items</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
       </div>
-      {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
-      <form onSubmit={addItem} className="mt-4 flex flex-wrap items-end gap-2 rounded-2xl border border-dashed border-slate-200 p-4">
-        <input required placeholder="Category" value={newItem.category} onChange={(e) => setNewItem({ ...newItem, category: e.target.value })} className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
-        <input required placeholder="Item name" value={newItem.item_name} onChange={(e) => setNewItem({ ...newItem, item_name: e.target.value })} className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
-        <input required type="number" step="0.01" placeholder="Price (GHS)" value={newItem.unit_price} onChange={(e) => setNewItem({ ...newItem, unit_price: e.target.value })} className="w-32 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
-        <button type="submit" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">Add Item</button>
-      </form>
+      {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">{error}</p>}
+      {loading && <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">Loading the price list...</p>}
+      {!loading && !error && visibleItems.length === 0 && (
+        <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">No items match.</p>
+      )}
 
       <div className="mt-6 space-y-8">
         {Object.entries(grouped).map(([category, categoryItems]) => (
-          <div key={category}>
-            <h3 className="text-xs font-bold uppercase tracking-widest text-brand-600">{category}</h3>
-            <div className="mt-3 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-soft">
-              <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <tbody className="divide-y divide-slate-100">
-                  {categoryItems.map((item) => {
-                    const draft = draftFor(item);
-                    return (
-                      <tr key={item.id} className={item.is_active ? '' : 'opacity-50'}>
-                        <td className="px-4 py-2.5 font-medium text-ink-900">{item.item_name}</td>
-                        <td className="px-4 py-2.5">
-                          <select
-                            value={draft.mode}
-                            onChange={(e) => updateDraft(item.id, item, { mode: e.target.value })}
-                            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none transition-colors focus:border-brand-400"
-                          >
-                            <option value="fixed">Fixed</option>
-                            <option value="range">Range</option>
-                          </select>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          {draft.mode === 'fixed' ? (
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={draft.unit_price}
-                              onChange={(e) => updateDraft(item.id, item, { unit_price: e.target.value })}
-                              className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition-colors focus:border-brand-400"
-                            />
-                          ) : (
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="number"
-                                step="0.01"
-                                placeholder="Min"
-                                value={draft.price_min}
-                                onChange={(e) => updateDraft(item.id, item, { price_min: e.target.value })}
-                                className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition-colors focus:border-brand-400"
-                              />
-                              <span className="text-slate-400">–</span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                placeholder="Max"
-                                value={draft.price_max}
-                                onChange={(e) => updateDraft(item.id, item, { price_max: e.target.value })}
-                                className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm outline-none transition-colors focus:border-brand-400"
-                              />
+          <section key={category} aria-label={category}>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-brand-600 dark:text-brand-300">
+              {category} ({categoryItems.length})
+            </h3>
+            <div className="mt-3 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-soft dark:border-slate-700 dark:bg-slate-800">
+              <table className="w-full text-left text-sm sm:table-fixed">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                  <tr>
+                    <th scope="col" className="px-4 py-2.5 font-medium sm:w-1/2">Item</th>
+                    <th scope="col" className="px-4 py-2.5 font-medium sm:w-1/4">Price</th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-medium sm:w-1/4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {categoryItems.map((item) =>
+                    editingId === item.id ? (
+                      <tr key={item.id}>
+                        <td colSpan={3} className="bg-slate-50 p-4 dark:bg-slate-900/60">
+                          <form onSubmit={(e) => saveEdit(e, item)} className="space-y-3" aria-label={`Edit ${item.item_name}`}>
+                            <PriceItemFields draft={editDraft} onChange={setEditDraft} />
+                            <div className="flex gap-2">
+                              <button
+                                type="submit"
+                                disabled={saving}
+                                className="rounded-lg bg-brand-500 px-4 py-2 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingId(null)}
+                                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-white dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+                              >
+                                Cancel
+                              </button>
                             </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <button
-                            onClick={() => saveItem(item)}
-                            disabled={savingId === item.id}
-                            className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
-                          >
-                            Save
-                          </button>
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          <button
-                            onClick={() => toggleActive(item)}
-                            className="text-xs font-semibold text-slate-400 hover:text-brand-600"
-                          >
-                            {item.is_active ? 'Deactivate' : 'Activate'}
-                          </button>
+                          </form>
                         </td>
                       </tr>
-                    );
-                  })}
+                    ) : (
+                      <tr key={item.id}>
+                        <td className="px-4 py-2.5 font-medium text-ink-900 dark:text-white">
+                          <span className={item.is_active ? '' : 'text-slate-500 dark:text-slate-400'}>{item.item_name}</span>
+                          {!item.is_active && (
+                            <span className="ml-2 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                              Inactive
+                            </span>
+                          )}
+                        </td>
+                        <td className={`px-4 py-2.5 text-slate-700 dark:text-slate-200 ${item.unit_price != null ? 'whitespace-nowrap' : 'sm:whitespace-nowrap'}`}>
+                          {priceLabel(item)}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
+                            <button
+                              type="button"
+                              onClick={() => startEditing(item)}
+                              aria-label={`Edit ${item.item_name}`}
+                              className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300 dark:hover:text-brand-200"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleActive(item)}
+                              disabled={togglingId === item.id}
+                              aria-label={`${item.is_active ? 'Deactivate' : 'Activate'} ${item.item_name}`}
+                              className="text-xs font-semibold text-slate-500 hover:text-brand-600 disabled:opacity-60 dark:text-slate-400 dark:hover:text-brand-300"
+                            >
+                              {item.is_active ? 'Deactivate' : 'Activate'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  )}
                 </tbody>
               </table>
-              </div>
             </div>
-          </div>
+          </section>
         ))}
       </div>
     </div>
@@ -1969,37 +2322,37 @@ function CapacityTab() {
 
   return (
     <div>
-      <h2 className="font-display text-lg text-ink-900">Daily Order Capacity</h2>
+      <h2 className="font-display text-lg text-ink-900 dark:text-white">Daily Order Capacity</h2>
       {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
       <form onSubmit={handleSubmit} className="mt-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400">Date</label>
-          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
+          <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="mt-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
         </div>
         <div>
           <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400">Max Orders</label>
-          <input type="number" min="1" value={form.max_orders} onChange={(e) => setForm({ ...form, max_orders: e.target.value })} className="mt-1 w-28 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
+          <input type="number" min="1" value={form.max_orders} onChange={(e) => setForm({ ...form, max_orders: e.target.value })} className="mt-1 w-28 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400" />
         </div>
         <button type="submit" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">Set</button>
       </form>
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-soft">
+      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-soft">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="bg-slate-50 dark:bg-slate-900 text-xs uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3 font-medium">Date</th>
                 <th className="px-4 py-3 font-medium">Max Orders</th>
                 <th className="px-4 py-3 font-medium">Current Orders</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {capacity.map((c) => (
                 <tr key={c.id}>
-                  <td className="px-4 py-3 text-ink-900">{c.capacity_date?.slice(0, 10)}</td>
-                  <td className="px-4 py-3 text-slate-600">{c.max_orders}</td>
-                  <td className="px-4 py-3 text-slate-600">{c.current_orders}</td>
+                  <td className="px-4 py-3 text-ink-900 dark:text-white">{c.capacity_date?.slice(0, 10)}</td>
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{c.max_orders}</td>
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{c.current_orders}</td>
                 </tr>
               ))}
             </tbody>
@@ -2255,7 +2608,7 @@ function MessagesTab({ isAdmin }) {
                 <p className="mt-1 text-xs text-slate-400">{new Date(m.created_at).toLocaleString()}</p>
               </div>
               {!m.read_at && (
-                <button onClick={() => markRead(m.id)} className="text-xs font-semibold text-brand-600 hover:text-brand-700">
+                <button onClick={() => markRead(m.id)} className="text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-300 dark:hover:text-brand-200">
                   Mark as read
                 </button>
               )}
@@ -2311,11 +2664,11 @@ function AnalyticsTab() {
           {Array.from({ length: 5 }).map((_, index) => (
             <div
               key={index}
-              className="h-32 animate-pulse rounded-2xl border border-slate-200 bg-white"
+              className="h-32 animate-pulse rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
             />
           ))}
         </div>
-        <div className="h-72 animate-pulse rounded-2xl border border-slate-200 bg-white" />
+        <div className="h-72 animate-pulse rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
       </div>
     );
   }
@@ -2383,39 +2736,25 @@ const maxRevenue = Math.max(
           {/* Breadcrumb */}
           <div className="mb-3 flex items-center gap-2 text-xs font-semibold">
             <span className="text-slate-400">
-              Staff
+              Admin
             </span>
 
             <span className="text-slate-300">
               /
             </span>
 
-            <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-slate-600 shadow-sm">
+            <span className="rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-700 px-2.5 py-1 text-slate-600 dark:text-slate-300 shadow-sm">
               Analytics
             </span>
           </div>
 
-          {/* Heading */}
-          <div className="flex items-center gap-3">
-            {/* Analytics icon */}
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-600 shadow-sm">
-              <BarChart3 size={22} />
-            </div>
-
-            <div>
-              <h2 className="font-display text-2xl font-semibold text-slate-900 sm:text-3xl">
-                Analytics
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Monitor sales, orders, expenses, and outstanding balances.
-              </p>
-            </div>
-          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Monitor sales, orders, expenses, and outstanding balances.
+          </p>
         </div>
 
         {/* Live dashboard badge */}
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-emerald-700 shadow-sm">
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-emerald-700 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
           <span className="relative flex h-2.5 w-2.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-60" />
             <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
@@ -2429,29 +2768,29 @@ const maxRevenue = Math.max(
       </div>
 
       {data.low_stock_count > 0 && (
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 dark:border-amber-900 dark:bg-amber-950/30">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
               <AlertTriangle size={17} />
             </div>
 
             <div>
-              <p className="text-sm font-semibold text-amber-900">
+              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
                 {data.low_stock_count} inventory item
                 {data.low_stock_count === 1 ? ' is' : 's are'} running low
               </p>
-              <p className="text-xs text-amber-700">
+              <p className="text-xs text-amber-700 dark:text-amber-300">
                 Review stock levels before they run out.
               </p>
             </div>
           </div>
 
-          <a
-            href="/staff?tab=inventory"
-            className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 shadow-sm transition hover:bg-amber-100"
+          <Link
+            to="/admin?tab=inventory"
+            className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-800 shadow-sm transition hover:bg-amber-100 dark:border-amber-800 dark:bg-transparent dark:text-amber-200 dark:hover:bg-amber-950/50"
           >
             View inventory
-          </a>
+          </Link>
         </div>
       )}
 
@@ -2462,28 +2801,28 @@ const maxRevenue = Math.max(
             label: 'Total Orders',
             value: data.total_orders,
             description: 'Orders recorded',
-            accent: 'text-slate-900',
+            accent: 'text-slate-900 dark:text-white',
             format: undefined,
           },
           {
             label: 'Total Revenue',
             value: data.total_revenue,
             description: 'Gross sales',
-            accent: 'text-slate-900',
+            accent: 'text-slate-900 dark:text-white',
             format: formatPrice,
           },
           {
             label: 'Total Expenses',
             value: data.total_expenses,
             description: 'Recorded expenses',
-            accent: 'text-slate-900',
+            accent: 'text-slate-900 dark:text-white',
             format: formatPrice,
           },
           {
             label: 'Net Profit',
             value: data.net_profit,
             description: 'Revenue minus expenses',
-            accent: data.net_profit < 0 ? 'text-red-600' : 'text-slate-900',
+            accent: data.net_profit < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white',
             format: formatPrice,
           },
           {
@@ -2492,8 +2831,8 @@ const maxRevenue = Math.max(
             description: 'Amount still owed',
             accent:
               data.outstanding_balance > 0
-                ? 'text-amber-700'
-                : 'text-slate-900',
+                ? 'text-amber-700 dark:text-amber-400'
+                : 'text-slate-900 dark:text-white',
             format: formatPrice,
           },
         ].map((metric, index) => (
@@ -2502,7 +2841,7 @@ const maxRevenue = Math.max(
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
-            className="group rounded-2xl border border-white/60 bg-white/95 p-5 shadow-lg shadow-blue-950/10 backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-xl"          >
+            className="group rounded-2xl border border-white/60 bg-white/95 dark:border-slate-700 dark:bg-slate-800 p-5 shadow-lg shadow-blue-950/10 backdrop-blur-sm transition hover:-translate-y-0.5 hover:bg-white hover:shadow-xl"          >
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
               {metric.label}
             </p>
@@ -2527,9 +2866,9 @@ const maxRevenue = Math.max(
       </div>
 
       {/* Sales trend */}
-<div className="mt-6 rounded-2xl border border-white/60 bg-white/95 p-5 shadow-lg shadow-blue-950/10 backdrop-blur-sm sm:p-6">
+<div className="mt-6 rounded-2xl border border-white/60 bg-white/95 dark:border-slate-700 dark:bg-slate-800 p-5 shadow-lg shadow-blue-950/10 backdrop-blur-sm sm:p-6">
     <div>
-      <h3 className="text-sm font-semibold text-slate-900">
+      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
         Sales Trend
       </h3>
 
@@ -2550,7 +2889,7 @@ const maxRevenue = Math.max(
       </div>
     </div>
 
-    <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+    <div className="flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-1">
       {SALES_PERIODS.map((p) => (
         <button
           key={p.key}
@@ -2558,8 +2897,8 @@ const maxRevenue = Math.max(
           onClick={() => setPeriodKey(p.key)}
           className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
             periodKey === p.key
-              ? 'bg-white text-brand-700 shadow-sm ring-1 ring-slate-200'
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'bg-white dark:bg-slate-700 text-brand-700 dark:text-brand-300 shadow-sm ring-1 ring-slate-200 dark:ring-slate-600'
+              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
           }`}
         >
           {p.label}
@@ -2569,12 +2908,12 @@ const maxRevenue = Math.max(
   </div>
 
   {normalizedTrend.length === 0 ? (
-    <div className="mt-6 flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center">
-      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm">
+    <div className="mt-6 flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-6 text-center">
+      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white dark:bg-slate-800 text-slate-400 shadow-sm">
         <BarChart3 size={20} />
       </div>
 
-      <p className="mt-3 text-sm font-semibold text-slate-700">
+      <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
         No sales in this period
       </p>
 
@@ -2601,7 +2940,7 @@ const maxRevenue = Math.max(
           {[0, 1, 2, 3, 4].map((line) => (
             <div
               key={line}
-              className="border-t border-slate-100"
+              className="border-t border-slate-100 dark:border-slate-700"
             />
           ))}
         </div>
@@ -2720,9 +3059,9 @@ const maxRevenue = Math.max(
       {/* Status + busiest dates */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Orders by status */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm sm:p-6">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
               Orders by Status
             </h3>
             <p className="mt-1 text-xs text-slate-400">
@@ -2732,7 +3071,7 @@ const maxRevenue = Math.max(
 
           {totalStatusOrders > 0 ? (
             <>
-              <div className="mt-6 flex h-4 overflow-hidden rounded-full bg-slate-100">
+              <div className="mt-6 flex h-4 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
                 {data.orders_by_status.map((s) => (
                   <div
                     key={s.status}
@@ -2759,13 +3098,13 @@ const maxRevenue = Math.max(
                           statusBarClasses[s.status] || 'bg-slate-300'
                         }`}
                       />
-                      <span className="truncate text-slate-600">
+                      <span className="truncate text-slate-600 dark:text-slate-300">
                         {statusLabels[s.status] || s.status}
                       </span>
                     </div>
 
                     <span
-                      className="font-semibold text-slate-900"
+                      className="font-semibold text-slate-900 dark:text-white"
                       style={{
                         fontVariantNumeric: 'lining-nums tabular-nums',
                       }}
@@ -2784,9 +3123,9 @@ const maxRevenue = Math.max(
         </div>
 
         {/* Busiest dates */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 shadow-sm sm:p-6">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
               Busiest Drop-off Dates
             </h3>
             <p className="mt-1 text-xs text-slate-400">
@@ -2814,14 +3153,14 @@ const maxRevenue = Math.max(
                 return (
                   <div key={b.drop_off_date}>
                     <div className="mb-1.5 flex items-center justify-between text-xs">
-                      <span className="font-medium text-slate-600">
+                      <span className="font-medium text-slate-600 dark:text-slate-300">
                         {new Date(b.drop_off_date)
                           .toISOString()
                           .slice(0, 10)}
                       </span>
 
                       <span
-                        className="font-semibold text-slate-900"
+                        className="font-semibold text-slate-900 dark:text-white"
                         style={{
                           fontVariantNumeric: 'lining-nums tabular-nums',
                         }}
@@ -2831,7 +3170,7 @@ const maxRevenue = Math.max(
                       </span>
                     </div>
 
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${width}%` }}

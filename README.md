@@ -1,4 +1,4 @@
-# Mum's Love Laundry — Version 18.0
+# Mum's Love Laundry — Version 19.0
 
 Laundry order-tracking app for Mum's Love Laundry (Eastern Region, Ghana).
 **Walk-in drop-off model** — customers bring laundry in themselves and
@@ -20,10 +20,15 @@ layered on top of the customer-facing app.
   reference only.
 - server/db/init.sql — fresh-install schema baseline, folded through v13.
 - server/db/migrate.js — checksummed, version-tracked migration runner; the
-  fresh-install path applies v14–v18 after the v13 baseline.
+  fresh-install path applies v14–v22 after the v13 baseline.
 - `server/db/migrate_v14_balance_reminders.sql`, `migrate_v15_invoices.sql`,
-  `migrate_v16_branches.sql`, `migrate_v17_settings.sql`, and
-  `migrate_v18_late_fee_payments.sql` — schema changes after that baseline.
+  `migrate_v16_branches.sql`, `migrate_v17_settings.sql`,
+  `migrate_v18_late_fee_payments.sql`, `migrate_v19_backfill_branches.sql`,
+  `migrate_v20_audit_log.sql`, `migrate_v21_shop_time_zone.sql`, and
+  `migrate_v22_more_themes.sql` — schema changes after that baseline. v21 sets
+  the database to `Africa/Accra`, so its dates follow the shop's calendar
+  whatever zone the server is configured for. v22 lets `theme_preference` hold
+  the newer colour themes (see `client/src/lib/themes.js`).
   Do not replay the older v3–v13 migrations on top of `init.sql`; their
   changes are already included.
 - server/uploads/avatars/ — local development storage for avatars; production
@@ -90,9 +95,9 @@ psql -U postgres -h 127.0.0.1 -d mums_love_laundry -c "UPDATE users SET role = '
 ```
 
 Log out and back in (JWTs carry the role at issue-time). From there, use
-the **Staff** nav link → **Staff** tab to create `laundry_staff` and
-`administrator` accounts through the UI — only a `super_admin` can create
-another `administrator`.
+**Administration → Staff accounts** in the admin workspace (`/admin`) to create
+`laundry_staff` and `administrator` accounts through the UI. Only a
+`super_admin` can create accounts.
 
 ## Roles
 
@@ -100,8 +105,16 @@ another `administrator`.
 |-------------------|----------------------------------------------------------------------|
 | `customer`        | Place orders, track them, cancel before processing starts.          |
 | `laundry_staff`   | Advance orders through washing/ironing/QC/ready stages; manage garment tags. |
-| `administrator`   | Everything staff can, plus manage staff/areas/pricing/capacity.     |
-| `super_admin`     | Everything an administrator can across all branches, plus create other administrators and manage branches. |
+| `administrator`   | Everything staff can, plus analytics, payments, inventory, expenses, zones, and capacity for their branch, and the price list, which is shared by all branches. |
+| `super_admin`     | Everything an administrator can across all branches, plus branches, display currency rates, staff accounts, and the audit log. |
+
+Laundry staff work in `/staff`; administrators and super admins work in `/admin`,
+which shares the same tabs and adds a business overview. An admin can open `/staff`
+to preview the staff view; changes made there are real. Hiding a page isn't
+security, so the server enforces each of these role limits itself.
+
+The **audit log** (`/admin?tab=audit`) records staff accounts created, branch and
+price changes, voided invoices, and deleted expenses.
 
 `laundry_staff` and `administrator` accounts belong to one branch. The server
 applies that to single records as well as lists, so staff get a 403 on another
@@ -119,8 +132,10 @@ Formal & Traditional Wear). An order is a cart of `order_items` (item +
 quantity), each snapshotting the item's price at order time. A handful of
 items (e.g. Bathroom Mat, Wedding Dress Small) are range-priced — the
 order uses the low end as an estimate, flagged `is_price_estimated`, with
-the exact price confirmed at drop-off. Admins manage the whole catalog —
-prices, ranges, new items, activate/deactivate — from Staff → Pricing.
+the exact price confirmed at drop-off. Administrators and super admins manage
+the whole catalog — names, categories, prices, ranges, new items,
+activate/deactivate — from Admin → Pricing. Prices apply to every branch, and
+orders already placed keep the price they were placed at.
 
 The old `services` table (Washing Only / Ironing Only / Wash & Iron / Dry
 Cleaning) still exists and powers the descriptive cards on the public
@@ -174,7 +189,7 @@ Every account (`/settings`) can manage:
 - **Display currency** — `currencies` table holds manually-set exchange
   rates against GHS (admin-editable via `PATCH /api/admin/currencies/:code`).
   Selecting a currency only changes how prices are *displayed* (Dashboard,
-  Staff → Customers); every order is still created and charged in GHS —
+  Admin → Customers); every order is still created and charged in GHS —
   there's no live FX feed or multi-currency payment involved.
 - **Language** — `preferred_language` is a real, saved preference, but
   translation coverage is intentionally partial: only the nav bar, footer,
@@ -234,10 +249,10 @@ its payments, never stored redundantly, so they can't drift out of sync.
   `payment_status` (`unpaid` / `partial` / `paid`) and balance due
   alongside the order status, computed by the same `ORDER_SELECT` fragment
   everywhere so it can't drift between views.
-- **Staff → Payments** (admin-only) is the global transaction ledger
+- **Admin → Payments** (admin-only) is the global transaction ledger
   across every order — filterable by date range, method, and type, with
   running Total Collected / Total Refunded figures.
-- **Staff → Analytics** adds an **Outstanding Balance** figure — the sum
+- **Admin → Analytics** adds an **Outstanding Balance** figure — the sum
   of every non-cancelled order's unpaid balance right now — alongside
   revenue, expenses, and net profit.
 - Marking an order `completed` does **not** require the balance to be
@@ -247,12 +262,12 @@ its payments, never stored redundantly, so they can't drift out of sync.
 
 ## Sales Analytics, Inventory &amp; Expenses
 
-Staff → **Analytics** (admin-only) breaks sales down at three granularities
+Admin → **Analytics** (admin-only) breaks sales down at three granularities
 — daily (last 30 days), monthly (last 12 months), and yearly (all-time) —
 each showing revenue, order count, expenses, and net (revenue − expenses)
 for that period, plus running totals and a low-stock alert banner.
 
-Staff → **Inventory** (admin-only) tracks laundry essentials — detergent,
+Admin → **Inventory** (admin-only) tracks laundry essentials — detergent,
 fabric softener, poly bags, hangers, etc. Each item has a
 `quantity_on_hand` and a `reorder_threshold`; once quantity drops to or
 below the threshold it's flagged low-stock (an amber badge on the item, a
@@ -261,9 +276,10 @@ Stock changes go through **Adjust Stock** (+/-) rather than editing the
 quantity directly, so every change is logged to `inventory_transactions`
 with who made it and why — a running audit trail, not just a number. The
 starter catalog seeds nine common essentials at quantity 0 (real counts
-unknown) — record actual stock on first use.
+unknown) on the first branch — record actual stock on first use. Other branches
+start with an empty list and add their own items.
 
-Staff → **Expenses** (admin-only) is a simple ledger — category,
+Admin → **Expenses** (admin-only) is a simple ledger — category,
 description, amount, date — for operating costs (utilities, supplies,
 wages, rent, maintenance). It feeds directly into the Analytics net-profit
 figures; there's no receipt/invoice attachment or approval workflow, just
@@ -282,8 +298,8 @@ a running record an admin can add to and delete from.
 | POST   | `/api/auth/profile/avatar`         | User        | Upload/replace profile picture (multipart).    |
 | GET    | `/api/currencies`                  | Public      | List active display currencies + rates.        |
 | GET    | `/api/items`                       | Public      | List active laundry items with pricing.        |
-| GET/POST | `/api/admin/items`               | Admin       | List all / create catalog items.               |
-| PATCH  | `/api/admin/items/:id`             | Admin       | Update an item's price/range/active state.     |
+| GET/POST | `/api/admin/items`               | Admin/Super admin | List all / create catalog items.               |
+| PATCH  | `/api/admin/items/:id`             | Admin/Super admin | Update an item's name, category, price/range or active state. |
 | GET    | `/api/services`                    | Public      | List descriptive service categories (marketing only). |
 | GET    | `/api/zones`                       | Public      | List active customer areas (informational).    |
 | GET    | `/api/capacity/check?date=`        | Public      | Check remaining capacity for a drop-off date.  |
@@ -301,19 +317,22 @@ a running record an admin can add to and delete from.
 | PATCH  | `/api/admin/orders/:id/storage-location` | Staff | Record where the order is stored.              |
 | GET/POST | `/api/orders/:orderId/garments`  | Staff       | List/tag garments for an order.                |
 | PATCH  | `/api/orders/garments/:id`         | Staff       | Update a garment tag's status/notes.           |
-| GET/POST | `/api/admin/staff`               | Admin       | List/create staff accounts.                    |
+| GET/POST | `/api/admin/staff`               | Admin/Super admin | List (admin) / create staff accounts (super admin). |
 | GET/POST/PATCH | `/api/admin/zones`           | Admin       | Manage customer areas (informational).         |
 | GET/POST | `/api/admin/capacity`            | Admin       | Manage daily order caps.                       |
-| GET/PATCH | `/api/admin/currencies`         | Admin       | List / edit currency display rates.            |
+| GET/PATCH | `/api/admin/currencies`         | Admin/Super admin | List (admin) / edit display rates (super admin). |
 | GET    | `/api/admin/customers`             | Staff       | List every customer, searchable, with order counts. |
 | GET    | `/api/admin/customers/:id`         | Staff       | One customer's full profile + order history.   |
 | GET/PATCH | `/api/notifications`             | User        | In-app notifications, mark as read.            |
 | POST   | `/api/contact`                     | Public      | Submit a contact-form message.                 |
 | GET    | `/api/contact`                     | Staff       | List contact-form submissions.                 |
 | PATCH  | `/api/contact/:id/read`            | Staff       | Mark a submission as read.                     |
+| GET    | `/api/admin/overview`              | Admin       | Admin landing page figures and sidebar badges. |
+| GET    | `/api/admin/audit-log`             | Super admin | Latest 200 audit log entries.                  |
 | GET    | `/api/admin/analytics`             | Admin       | Order volume; daily/monthly/yearly revenue, expenses &amp; net; status breakdown. |
 | POST   | `/api/admin/reminders/run`         | Admin       | Manually trigger the daily pickup-reminder sweep. |
 | GET    | `/api/orders/:id/payments`         | User/Staff  | An order's payment history (owner or staff only). |
+| GET    | `/api/orders/user/payments`        | User        | All of the authenticated user's own payments.  |
 | POST   | `/api/admin/orders/:id/payments`   | Staff       | Record a payment (deposit/partial/balance/full/refund/late_fee). |
 | GET    | `/api/admin/payments`              | Admin       | Global transaction ledger, filterable by date/method/type. |
 | GET/POST | `/api/admin/inventory`           | Admin       | List / create laundry-essential inventory items. |
@@ -367,7 +386,7 @@ it in person, same as the rest of this walk-in shop's payments.
 
 Staff record the money under Show payments with the **Storage Fee** type, up to
 the amount still due (`late_fee_due`). These `late_fee` payments count towards
-Total Collected in Staff → Payments, but they don't reduce `balance_due` or
+Total Collected in Admin → Payments, but they don't reduce `balance_due` or
 appear in Analytics revenue, which is based on order totals.
 
 The separate worker schedules this reminder for 9:00am in Africa/Accra and emails/texts customers whose orders are
@@ -467,8 +486,10 @@ avatars are stored in Cloudinary and are managed separately from PostgreSQL back
   staff operations and records.
 - **v17.0**: account preferences for notification categories, birthday
   discounts, and automatic invoice generation.
-- **v18.0 (current workspace)**: enforces those preferences and branch access
-  on single records, adds low-stock alerts, and records storage-fee payments.
+- **v18.0**: enforces those preferences and branch access on single records,
+  adds low-stock alerts, and records storage-fee payments.
+- **v19.0 (current workspace)**: assigns inventory items and expenses that had
+  no branch to the first branch, and makes a branch required on both.
 - **Future**: automated Mobile Money collection beyond the current Paystack
   integration, loyalty tracking, full site translation beyond nav/footer/
   settings, live FX rates for display currency, and per-item cost-based

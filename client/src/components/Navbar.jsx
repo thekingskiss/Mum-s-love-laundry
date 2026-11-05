@@ -4,8 +4,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Clock, LogOut, Menu, Moon, Phone, Settings, Sun, User, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
+import { isDarkTheme } from '../lib/themes.js';
 import { useLanguage } from '../context/LanguageContext.jsx';
 import NotificationBell from './NotificationBell.jsx';
+import { STAFF_ROLES, workspacePath } from '../lib/roles';
 import { SHOP_HOURS, SHOP_PHONE } from '../lib/shopInfo.js';
 import mllLogo from '../assets/mll-logo.png';
 
@@ -14,7 +16,6 @@ const navLinkClass = ({ isActive }) =>
     isActive ? 'text-brand-600' : 'text-slate-500 dark:text-slate-300'
   }`;
 
-const STAFF_ROLES = ['laundry_staff', 'administrator', 'super_admin'];
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000');
 function avatarSrc(url) {
@@ -24,7 +25,8 @@ function avatarSrc(url) {
 
 export default function Navbar() {
   const { user, logout, updateProfile } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const isDark = isDarkTheme(resolvedTheme);
   const { t } = useLanguage();
   const isStaff = Boolean(user && STAFF_ROLES.includes(user.role));
   const [open, setOpen] = useState(false);
@@ -40,8 +42,7 @@ export default function Navbar() {
   }
 
   function handleToggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    toggleTheme();
+    const next = toggleTheme();
     if (user) {
       updateProfile({ theme_preference: next }).catch(() => {});
     }
@@ -114,7 +115,7 @@ export default function Navbar() {
             </NavLink>
           )}
           {isStaff && (
-            <NavLink to="/staff" className={navLinkClass}>
+            <NavLink to={workspacePath(user.role)} className={navLinkClass}>
               {t('nav_dashboard')}
             </NavLink>
           )}
@@ -123,10 +124,10 @@ export default function Navbar() {
         <div className="hidden items-center gap-4 md:flex">
           <button
             onClick={handleToggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-brand-300 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
           >
-            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            {isDark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
           {user && <NotificationBell />}
           {user ? (
@@ -241,7 +242,7 @@ export default function Navbar() {
               </NavLink>
             )}
             {isStaff && (
-              <NavLink to="/staff" className={navLinkClass} onClick={() => setOpen(false)}>
+              <NavLink to={workspacePath(user.role)} className={navLinkClass} onClick={() => setOpen(false)}>
                 {t('nav_dashboard')}
               </NavLink>
             )}
@@ -255,8 +256,8 @@ export default function Navbar() {
               onClick={handleToggleTheme}
               className="flex items-center gap-2.5 text-left text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300"
             >
-              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-              {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              {isDark ? <Sun size={15} /> : <Moon size={15} />}
+              {isDark ? 'Light Mode' : 'Dark Mode'}
             </button>
             {user ? (
               <button onClick={handleLogout} className="text-left text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300">

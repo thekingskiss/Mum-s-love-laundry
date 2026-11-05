@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { isPromoActive } = require('../utils/pricing');
+const { recordAudit } = require('../services/auditLog');
 
 const SERVICE_COLUMNS = `
   id, service_name, description, base_price, icon_name,
@@ -55,6 +56,12 @@ async function updatePricing(req, res, next) {
     }
 
     await client.query('COMMIT');
+    await recordAudit(req.user, {
+      action: 'service.updated',
+      entityType: 'service',
+      entityId: id,
+      summary: `Updated pricing for "${result.rows[0].service_name}" (base price ${current.rows[0].base_price} → ${result.rows[0].base_price})`,
+    });
     res.json({ service: withPromoFlag(result.rows[0]) });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -79,6 +86,12 @@ async function setPromo(req, res, next) {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Service not found.' });
     }
+    await recordAudit(req.user, {
+      action: 'service.promo_set',
+      entityType: 'service',
+      entityId: id,
+      summary: `Set promo price for "${result.rows[0].service_name}" to ${promo_price ?? 'none'}`,
+    });
     res.json({ service: withPromoFlag(result.rows[0]) });
   } catch (err) {
     next(err);
