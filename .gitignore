@@ -7,3 +7,6 @@ server/uploads/avatars/*
 *.log
 .claude/
 Microsoft/
+
+# Local reference images and screenshots (not used by the app; the site's images live in client/src/assets)
+images/
