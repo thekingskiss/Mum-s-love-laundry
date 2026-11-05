@@ -1,10 +1,14 @@
+const { logger } = require('../utils/logger');
+
 function notFound(req, res) {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
 }
 
-// eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
-  console.error(err);
+  // Expected client errors (validation, duplicates) are logged by the request
+  // logger already; only unexpected failures need the stack trace.
+  const expected = err.status < 500 || err.code === '23505' || err.code === '23503';
+  if (!expected) logger.error('unhandled error', { method: req.method, path: req.path, error: err });
 
   if (err.code === '23505') {
     return res.status(409).json({ error: 'That record already exists.' });

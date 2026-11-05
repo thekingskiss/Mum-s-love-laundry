@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { recordAudit } = require('../services/auditLog');
 
 // Any authenticated user — the booking form and the staff branch switcher
 // both need this, but it doesn't need to be public.
@@ -33,6 +34,12 @@ async function createBranch(req, res, next) {
        RETURNING id, name, address, phone, email, is_active, created_at`,
       [name.trim(), (address || '').trim() || null, (phone || '').trim() || null, (email || '').trim() || null]
     );
+    await recordAudit(req.user, {
+      action: 'branch.created',
+      entityType: 'branch',
+      entityId: result.rows[0].id,
+      summary: `Created branch "${result.rows[0].name}"`,
+    });
     res.status(201).json({ branch: result.rows[0] });
   } catch (err) {
     next(err);
@@ -70,6 +77,12 @@ async function updateBranch(req, res, next) {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Branch not found.' });
     }
+    await recordAudit(req.user, {
+      action: 'branch.updated',
+      entityType: 'branch',
+      entityId: id,
+      summary: `Updated branch "${result.rows[0].name}" (${Object.keys(req.body).join(', ')})`,
+    });
     res.json({ branch: result.rows[0] });
   } catch (err) {
     next(err);

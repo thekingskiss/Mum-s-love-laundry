@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext.jsx';
+import { LanguageProvider } from '../context/LanguageContext.jsx';
 import RegisterPage from './RegisterPage.jsx';
 
 vi.mock('../api/axios', () => ({
@@ -15,7 +16,9 @@ function renderPage() {
   return render(
     <MemoryRouter>
       <AuthProvider>
-        <RegisterPage />
+        <LanguageProvider>
+          <RegisterPage />
+        </LanguageProvider>
       </AuthProvider>
     </MemoryRouter>
   );
@@ -24,6 +27,22 @@ function renderPage() {
 describe('RegisterPage', () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  it('is available in French, with the error messages translated too', async () => {
+    localStorage.setItem('mll_language', 'fr');
+    const { container } = renderPage();
+    expect(screen.getByRole('heading', { name: 'Créez votre compte' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Mot de passe')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/8 caractères minimum/i), { target: { value: 'short' } });
+    fireEvent.change(screen.getByPlaceholderText('Ama Serwaa'), { target: { value: 'Ama Serwaa' } });
+    fireEvent.change(screen.getByPlaceholderText('you@example.com'), { target: { value: 'ama@example.com' } });
+    fireEvent.change(screen.getByPlaceholderText(/\+233 20 000 0000/), { target: { value: '+233 20 000 0000' } });
+    fireEvent.change(screen.getByDisplayValue('Sélectionnez votre zone'), { target: { value: 'Koforidua' } });
+    fireEvent.submit(container.querySelector('form'));
+
+    expect(await screen.findByText('Le mot de passe doit contenir au moins 8 caractères.')).toBeInTheDocument();
   });
 
   it('renders the registration form', () => {

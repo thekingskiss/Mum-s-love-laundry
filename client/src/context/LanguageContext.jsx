@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { translate } from '../lib/i18n';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { languageDirection, normalizeLanguage, translate } from '../lib/i18n';
 import { useAuth } from './AuthContext.jsx';
 
 const LanguageContext = createContext(null);
@@ -9,17 +9,24 @@ export function LanguageProvider({ children }) {
   const { user } = useAuth();
   const [lang, setLangState] = useState(() => {
     try {
-      return localStorage.getItem(LANGUAGE_KEY) || 'en';
+      return normalizeLanguage(localStorage.getItem(LANGUAGE_KEY));
     } catch {
       return 'en';
     }
   });
 
+  // Tell the browser the page language and direction (right-to-left for Arabic).
+  useLayoutEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.dir = languageDirection(lang);
+  }, [lang]);
+
   useEffect(() => {
-    if (user?.preferred_language) setLangState(user.preferred_language);
+    if (user?.preferred_language) setLangState(normalizeLanguage(user.preferred_language));
   }, [user?.preferred_language]);
 
   function setLang(next) {
+    next = normalizeLanguage(next);
     setLangState(next);
     try {
       localStorage.setItem(LANGUAGE_KEY, next);

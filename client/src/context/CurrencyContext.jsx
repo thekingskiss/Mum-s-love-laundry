@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
 import { useAuth } from './AuthContext.jsx';
 
@@ -43,15 +43,18 @@ export function CurrencyProvider({ children }) {
 
   const active = currencies.find((c) => c.code === code) || currencies[0];
 
-  function formatPrice(ghsAmount) {
-    const amount = Number(ghsAmount) || 0;
-    const converted = amount * Number(active.rate_to_ghs);
-    return `${active.symbol} ${converted.toFixed(2)}`;
-  }
+  const formatPrice = useCallback(
+    (ghsAmount) => {
+      const amount = Number(ghsAmount) || 0;
+      const converted = amount * Number(active.rate_to_ghs);
+      return `${active.symbol} ${converted.toFixed(2)}`;
+    },
+    [active]
+  );
 
   const value = useMemo(
     () => ({ currencies, code, setCode, active, formatPrice }),
-    [currencies, code, active]
+    [currencies, code, active, formatPrice]
   );
 
   return <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>;

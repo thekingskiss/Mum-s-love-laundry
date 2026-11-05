@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useLanguage } from '../context/LanguageContext.jsx';
 import mllLogo from '../assets/mll-logo.png';
 import registerBgImage from '../assets/register-bg-laundry.jpg';
 
@@ -11,6 +12,7 @@ const initialForm = { full_name: '', email: '', phone_number: '', location_zone:
 const PHONE_PATTERN = /^[+]?[\d\s-]{7,20}$/;
 
 export default function RegisterPage() {
+  const { t } = useLanguage();
   const { register } = useAuth();
   const navigate = useNavigate();
   const [zones, setZones] = useState([]);
@@ -34,11 +36,11 @@ export default function RegisterPage() {
     setError('');
 
     if (!PHONE_PATTERN.test(form.phone_number.trim())) {
-      setError('Please enter a valid phone number (digits, spaces, dashes, optional leading +).');
+      setError(t('reg_err_phone'));
       return;
     }
     if (form.password.length < 8) {
-      setError('Password must be at least 8 characters.');
+      setError(t('auth_password_short'));
       return;
     }
 
@@ -47,7 +49,7 @@ export default function RegisterPage() {
       await register(form);
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to create your account. Please try again.');
+      setError(err.response?.data?.error || t('reg_err_generic'));
     } finally {
       setSubmitting(false);
     }
@@ -65,14 +67,14 @@ export default function RegisterPage() {
       <div className="relative w-full max-w-md rounded-2xl border border-slate-100 bg-white p-8 shadow-soft">
         <div className="flex flex-col items-center text-center">
           <img src={mllLogo} alt="Mum's Love Laundry" className="h-14 w-auto" />
-          <h1 className="mt-4 font-display text-2xl font-semibold text-ink-900">Create your account</h1>
-          <p className="mt-1 text-sm text-slate-500">Join Mum's Love Laundry in a few seconds.</p>
+          <h1 className="mt-4 font-display text-2xl font-semibold text-ink-900">{t('reg_title')}</h1>
+          <p className="mt-1 text-sm text-slate-500">{t('reg_subtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Full Name</label>
-            <input
+            <label htmlFor="register-full-name" className="mb-1 block text-sm font-medium text-slate-700">{t('settings_full_name')}</label>
+            <input id="register-full-name"
               required
               value={form.full_name}
               onChange={update('full_name')}
@@ -81,8 +83,8 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
-            <input
+            <label htmlFor="register-email" className="mb-1 block text-sm font-medium text-slate-700">{t('login_email')}</label>
+            <input id="register-email"
               type="email"
               required
               value={form.email}
@@ -92,8 +94,8 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Phone Number</label>
-            <input
+            <label htmlFor="register-phone-number" className="mb-1 block text-sm font-medium text-slate-700">{t('settings_phone')}</label>
+            <input id="register-phone-number"
               required
               value={form.phone_number}
               onChange={update('phone_number')}
@@ -102,15 +104,15 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Location Zone</label>
-            <select
+            <label htmlFor="register-location-zone" className="mb-1 block text-sm font-medium text-slate-700">{t('reg_zone')}</label>
+            <select id="register-location-zone"
               required
               value={form.location_zone}
               onChange={update('location_zone')}
               className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition-colors focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             >
               <option value="" disabled>
-                Select your zone
+                {t('reg_zone_select')}
               </option>
               {zones.map((z) => (
                 <option key={z} value={z}>
@@ -120,8 +122,8 @@ export default function RegisterPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Date of Birth (optional)</label>
-            <input
+            <label htmlFor="register-date-of-birth-optional" className="mb-1 block text-sm font-medium text-slate-700">{t('reg_dob')}</label>
+            <input id="register-date-of-birth-optional"
               type="date"
               max={new Date().toISOString().slice(0, 10)}
               value={form.date_of_birth}
@@ -131,15 +133,15 @@ export default function RegisterPage() {
             <p className="mt-1 text-xs text-slate-400">Add it and we'll give you 5% off any order on your birthday 🎂</p>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Password</label>
-            <input
+            <label htmlFor="register-password" className="mb-1 block text-sm font-medium text-slate-700">{t('login_password')}</label>
+            <input id="register-password"
               type="password"
               required
               minLength={8}
               value={form.password}
               onChange={update('password')}
               className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none transition-colors focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-              placeholder="At least 8 characters"
+              placeholder={t('reg_password_hint')}
             />
           </div>
 
@@ -153,14 +155,14 @@ export default function RegisterPage() {
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
           >
             {submitting && <Loader2 size={16} className="animate-spin" />}
-            Create Account
+            {t('reg_submit')}
           </motion.button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500">
-          Already have an account?{' '}
+          {t('reg_have_account')}{' '}
           <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">
-            Log in
+            {t('nav_login')}
           </Link>
         </p>
       </div>

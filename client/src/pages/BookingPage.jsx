@@ -317,8 +317,8 @@ export default function BookingPage() {
 
             {branches.length > 1 && (
               <div className="mt-5 max-w-sm">
-                <label className="text-sm font-semibold text-ink-900">Branch</label>
-                <select
+                <label htmlFor="booking-branch" className="text-sm font-semibold text-ink-900">Branch</label>
+                <select id="booking-branch"
                   value={branchId}
                   onChange={(e) => setBranchId(e.target.value)}
                   className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none transition-colors focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
@@ -352,8 +352,8 @@ export default function BookingPage() {
             )}
 
             <div className="mt-6">
-              <label className="text-sm font-semibold text-ink-900">Special instructions (optional)</label>
-              <textarea
+              <label htmlFor="booking-special-instructions-optional" className="text-sm font-semibold text-ink-900">Special instructions (optional)</label>
+              <textarea id="booking-special-instructions-optional"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}

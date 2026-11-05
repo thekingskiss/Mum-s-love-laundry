@@ -4,7 +4,6 @@ import {
   Bell,
   Box,
   Camera,
-  ChevronRight,
   CircleDollarSign,
   Clock3,
   FileText,
@@ -25,7 +24,54 @@ import { useCurrency } from '../context/CurrencyContext.jsx';
 import { useLanguage } from '../context/LanguageContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { SUPPORTED_LANGUAGES } from '../lib/i18n';
+import { ADMIN_ROLES } from '../lib/roles';
+import { THEMES } from '../lib/themes.js';
 import AvatarCropModal from '../components/AvatarCropModal.jsx';
+
+// A miniature page (canvas, card, text line, accent) in a theme's own colours.
+function SwatchPane({ swatch }) {
+  return (
+    <span
+      className="flex flex-1 items-end p-1.5"
+      style={{ backgroundColor: swatch.canvas }}
+    >
+      <span
+        className="block w-full rounded-sm p-1"
+        style={{
+          backgroundColor: swatch.surface,
+          border: `1px solid ${swatch.line}`,
+        }}
+      >
+        <span
+          className="block h-1 w-3/4 rounded-full"
+          style={{ backgroundColor: swatch.text }}
+        />
+        <span
+          className="mt-1 block h-1 w-1/3 rounded-full"
+          style={{ backgroundColor: swatch.accent }}
+        />
+      </span>
+    </span>
+  );
+}
+
+// `System` has no swatch of its own: show light and dark side by side.
+function ThemeSwatch({ swatch }) {
+  const panes = swatch
+    ? [swatch]
+    : ['light', 'dark'].map((id) => THEMES.find((t) => t.id === id).swatch);
+
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-14 overflow-hidden rounded-md border border-slate-200 dark:border-slate-700"
+    >
+      {panes.map((pane, index) => (
+        <SwatchPane key={index} swatch={pane} />
+      ))}
+    </span>
+  );
+}
 
 const API_ORIGIN =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
@@ -106,7 +152,8 @@ const preferenceSettings = [
 
 export default function SettingsPage() {
   const { user, updateProfile, uploadAvatar } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
+  const navigate = useNavigate();
 
   const {
     currencies,
@@ -300,16 +347,24 @@ export default function SettingsPage() {
       label: 'Account',
       icon: UserRound,
     },
-    {
-      id: 'branches',
-      label: 'Branches',
-      icon: Building2,
-    },
-    {
-      id: 'pricing',
-      label: 'Pricing',
-      icon: CircleDollarSign,
-    },
+    ...(user?.role === 'super_admin'
+      ? [
+          {
+            id: 'branches',
+            label: 'Branches',
+            icon: Building2,
+          },
+        ]
+      : []),
+    ...(ADMIN_ROLES.includes(user?.role)
+      ? [
+          {
+            id: 'pricing',
+            label: 'Pricing',
+            icon: CircleDollarSign,
+          },
+        ]
+      : []),
   ];
 
   const systemSections = [
@@ -335,7 +390,7 @@ export default function SettingsPage() {
     <div className="min-h-[calc(100vh-64px)] bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto flex max-w-[1180px] flex-col px-4 py-6 sm:px-6 lg:flex-row lg:px-8 lg:py-8">
         {/* Settings navigation */}
-        <aside className="w-full shrink-0 border-b border-slate-200 pb-4 dark:border-slate-800 lg:w-[232px] lg:border-b-0 lg:border-r lg:pb-0 lg:pr-7">
+        <aside className="w-full shrink-0 border-b border-slate-200 pb-4 dark:border-slate-800 lg:w-[232px] lg:border-b-0 lg:border-e lg:pb-0 lg:pe-7">
           <div className="mb-3 px-2 text-sm font-semibold text-slate-900 dark:text-white">
             Settings
           </div>
@@ -404,7 +459,7 @@ export default function SettingsPage() {
         </aside>
 
         {/* Main content */}
-        <main className="min-w-0 flex-1 lg:pl-14">
+        <main className="min-w-0 flex-1 lg:ps-14">
           {/* ACCOUNT */}
           {activeSection === 'account' && (
             <section className="mx-auto max-w-[640px]">
@@ -439,7 +494,7 @@ export default function SettingsPage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={avatarBusy}
-                    className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-slate-50 bg-red-600 text-white shadow-sm transition hover:bg-red-700 disabled:opacity-60 dark:border-slate-950"
+                    className="absolute -bottom-1 -end-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-slate-50 bg-red-600 text-white shadow-sm transition hover:bg-red-700 disabled:opacity-60 dark:border-slate-950"
                     aria-label="Change profile picture"
                   >
                     {avatarBusy ? (
@@ -495,11 +550,11 @@ export default function SettingsPage() {
               <form onSubmit={handleProfileSubmit} className="mt-8">
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-400">
+                    <label htmlFor="settings-first-name" className="block text-[11px] font-medium text-slate-400">
                       First name
                     </label>
 
-                    <input
+                    <input id="settings-first-name"
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
                       className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-red-500 dark:focus:ring-red-950"
@@ -507,11 +562,11 @@ export default function SettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-medium text-slate-400">
+                    <label htmlFor="settings-last-name" className="block text-[11px] font-medium text-slate-400">
                       Last name
                     </label>
 
-                    <input
+                    <input id="settings-last-name"
                       required
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
@@ -521,11 +576,11 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="mt-5">
-                  <label className="block text-[11px] font-medium text-slate-400">
+                  <label htmlFor="settings-username" className="block text-[11px] font-medium text-slate-400">
                     Username
                   </label>
 
-                  <input
+                  <input id="settings-username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-red-500 dark:focus:ring-red-950"
@@ -533,11 +588,11 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="mt-5">
-                  <label className="block text-[11px] font-medium text-slate-400">
+                  <label htmlFor="settings-phone-number" className="block text-[11px] font-medium text-slate-400">
                     Phone number
                   </label>
 
-                  <input
+                  <input id="settings-phone-number"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-red-500 dark:focus:ring-red-950"
@@ -545,11 +600,11 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="mt-5">
-                  <label className="block text-[11px] font-medium text-slate-400">
+                  <label htmlFor="settings-location-zone" className="block text-[11px] font-medium text-slate-400">
                     Location zone
                   </label>
 
-                  <select
+                  <select id="settings-location-zone"
                     value={locationZone}
                     onChange={(e) => setLocationZone(e.target.value)}
                     className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:focus:border-red-500 dark:focus:ring-red-950"
@@ -565,11 +620,11 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="mt-5">
-                  <label className="block text-[11px] font-medium text-slate-400">
+                  <label htmlFor="settings-date-of-birth" className="block text-[11px] font-medium text-slate-400">
                     Date of birth
                   </label>
 
-                  <input
+                  <input id="settings-date-of-birth"
                     type="date"
                     max={new Date().toISOString().slice(0, 10)}
                     value={dateOfBirth}
@@ -634,11 +689,11 @@ export default function SettingsPage() {
                     className="mt-5 space-y-4 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
                   >
                     <div>
-                      <label className="block text-[11px] font-medium text-slate-400">
+                      <label htmlFor="settings-new-email" className="block text-[11px] font-medium text-slate-400">
                         New email
                       </label>
 
-                      <input
+                      <input id="settings-new-email"
                         type="email"
                         required
                         value={emailForm.email}
@@ -653,11 +708,11 @@ export default function SettingsPage() {
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-medium text-slate-400">
+                      <label htmlFor="settings-current-password" className="block text-[11px] font-medium text-slate-400">
                         Current password
                       </label>
 
-                      <input
+                      <input id="settings-current-password"
                         type="password"
                         required
                         value={emailForm.current_password}
@@ -779,7 +834,7 @@ export default function SettingsPage() {
                           <span
                             className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
                               enabled
-                                ? 'translate-x-4'
+                                ? 'translate-x-4 rtl:-translate-x-4'
                                 : 'translate-x-0'
                             }`}
                           />
@@ -853,7 +908,7 @@ export default function SettingsPage() {
                         <span
                           className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
                             enabled
-                              ? 'translate-x-4'
+                              ? 'translate-x-4 rtl:-translate-x-4'
                               : 'translate-x-0'
                           }`}
                         />
@@ -869,14 +924,14 @@ export default function SettingsPage() {
                   Display preferences
                 </h2>
 
-                <div className="mt-4 grid min-w-0 grid-cols-3 gap-3">
+                <div className="mt-4 grid min-w-0 grid-cols-2 gap-3">
                   {/* Language */}
                   <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                    <label className="text-[11px] font-medium text-slate-400">
+                    <label htmlFor="settings-language" className="text-[11px] font-medium text-slate-400">
                       Language
                     </label>
 
-                    <select
+                    <select id="settings-language"
                       value={lang}
                       onChange={(e) =>
                         handleGeneralPreference(
@@ -898,47 +953,13 @@ export default function SettingsPage() {
                     </select>
                   </div>
 
-                  {/* Theme */}
-                  <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                    <label className="text-[11px] font-medium text-slate-400">
-                      Theme
-                    </label>
-
-                    <div className="mt-2 grid grid-cols-3 gap-1">
-                      {['light', 'dark', 'system'].map((option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onClick={() =>
-                            handleGeneralPreference(
-                              'theme_preference',
-                              option,
-                              setTheme
-                            )
-                          }
-                          className={`min-w-0 rounded-lg border px-1 py-2 text-[11px] font-semibold transition ${
-                            theme === option
-                              ? 'border-red-200 bg-red-50 text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-400'
-                              : 'border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800'
-                          }`}
-                        >
-                          {option === 'light'
-                            ? 'Light'
-                            : option === 'dark'
-                              ? 'Dark'
-                              : 'System'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   {/* Currency */}
                   <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-                    <label className="text-[11px] font-medium text-slate-400">
+                    <label htmlFor="settings-currency" className="text-[11px] font-medium text-slate-400">
                       Currency
                     </label>
 
-                    <select
+                    <select id="settings-currency"
                       value={currencyCode}
                       onChange={(e) =>
                         handleGeneralPreference(
@@ -958,6 +979,68 @@ export default function SettingsPage() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                </div>
+
+                {/* Theme */}
+                <div
+                  role="group"
+                  aria-labelledby="theme-picker-label"
+                  className="mt-3 min-w-0 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <p
+                      id="theme-picker-label"
+                      className="text-[11px] font-medium text-slate-400"
+                    >
+                      Theme
+                    </p>
+                    {theme === 'system' && resolvedTheme && (
+                      <p className="text-[11px] text-slate-400">
+                        Showing{' '}
+                        {THEMES.find((t) => t.id === resolvedTheme)?.label}{' '}
+                        from your device settings
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {THEMES.map((option) => {
+                      const selected = theme === option.id;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() =>
+                            handleGeneralPreference(
+                              'theme_preference',
+                              option.id,
+                              setTheme
+                            )
+                          }
+                          className={`min-w-0 rounded-lg border p-2 text-start transition ${
+                            selected
+                              ? 'border-red-300 bg-red-50 ring-1 ring-red-300 dark:border-red-800 dark:bg-red-950/40 dark:ring-red-800'
+                              : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <ThemeSwatch swatch={option.swatch} />
+                          <span
+                            className={`mt-2 block text-[11px] font-semibold ${
+                              selected
+                                ? 'text-red-600 dark:text-red-400'
+                                : 'text-slate-700 dark:text-slate-200'
+                            }`}
+                          >
+                            {option.label}
+                          </span>
+                          <span className="mt-0.5 block text-[10px] leading-4 text-slate-500 dark:text-slate-400">
+                            {option.description}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1002,7 +1085,7 @@ export default function SettingsPage() {
 
           <button
             type="button"
-            onClick={() => navigate('/staff?tab=branches')}
+            onClick={() => navigate('/admin?tab=branches')}
             className="rounded-lg px-2 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/30 dark:hover:text-red-300"
           >
             Manage
@@ -1030,7 +1113,7 @@ export default function SettingsPage() {
 
         <button
           type="button"
-          onClick={() => navigate('/staff?tab=branches')}
+          onClick={() => navigate('/admin?tab=branches')}
           className="mt-5 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-red-900 dark:hover:bg-red-950/30 dark:hover:text-red-400"
         >
           Add branch
@@ -1049,7 +1132,7 @@ export default function SettingsPage() {
       </h1>
 
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-        Manage the prices used for laundry services and orders.
+        Manage the prices used for laundry items and orders.
       </p>
     </div>
 
@@ -1067,7 +1150,7 @@ export default function SettingsPage() {
             </p>
 
             <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-              Manage item prices and service rates used when creating orders.
+              See the full price list, edit items and prices, and add new items.
             </p>
           </div>
         </div>
@@ -1075,7 +1158,7 @@ export default function SettingsPage() {
         <div className="mt-5 border-t border-slate-100 pt-4 dark:border-slate-800">
           <button
             type="button"
-            onClick={() => navigate('/staff?tab=pricing')}
+            onClick={() => navigate('/admin?tab=pricing')}
             className="w-full rounded-lg bg-red-600 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-red-700"
           >
             Manage pricing
@@ -1113,6 +1196,16 @@ export default function SettingsPage() {
 
         </main>
       </div>
+
+      {/* Crop the chosen picture before it is uploaded. */}
+      {cropFile && (
+        <AvatarCropModal
+          file={cropFile}
+          saving={avatarBusy}
+          onCancel={() => setCropFile(null)}
+          onSave={handleCropSave}
+        />
+      )}
     </div>
   );
 }

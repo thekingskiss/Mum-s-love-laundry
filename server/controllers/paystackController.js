@@ -72,6 +72,15 @@ async function initializePayment(req, res, next) {
   }
 }
 
+async function findPaymentByReference(reference) {
+  const result = await pool.query(
+    `SELECT id, order_id, amount, payment_method, payment_type, reference, notes, paid_at, created_at
+     FROM payments WHERE reference = $1`,
+    [reference]
+  );
+  return result.rows[0] || null;
+}
+
 // Shared by the browser-redirect verify call and the webhook. Always
 // re-verifies against Paystack itself (never trusts the caller's claimed
 // amount/status) and is idempotent on `reference`, so whichever of the two
@@ -83,13 +92,9 @@ async function finalizePaystackPayment(reference) {
     return { status: data.status, payment: null };
   }
 
-  const existing = await pool.query(
-    `SELECT id, order_id, amount, payment_method, payment_type, reference, notes, paid_at, created_at
-     FROM payments WHERE reference = $1`,
-    [reference]
-  );
-  if (existing.rows.length > 0) {
-    return { status: 'success', payment: existing.rows[0], alreadyRecorded: true };
+  const existing = await findPaymentByReference(reference);
+  if (existing) {
+    return { status: 'success', payment: existing, alreadyRecorded: true };
   }
 
   const orderId = data.metadata?.order_id;
@@ -142,6 +147,14 @@ async function finalizePaystackPayment(reference) {
     return { status: 'success', payment: result.rows[0], amount_paid: newNetPaid, balance_due: balance };
   } catch (err) {
     await client.query('ROLLBACK');
+    // The webhook and the browser callback can both get past the "already
+    // recorded?" check above at the same moment. The unique index on
+    // payments.reference lets only one insert through; the other is not a
+    // failure, because the payment is recorded, so report that one.
+    if (err.code === '23505') {
+      const recorded = await findPaymentByReference(reference);
+      if (recorded) return { status: 'success', payment: recorded, alreadyRecorded: true };
+    }
     throw err;
   } finally {
     client.release();
@@ -187,8 +200,11 @@ async function webhook(req, res, next) {
     if (!secret || !signature || !req.rawBody) {
       return res.status(400).end();
     }
-    const expected = crypto.createHmac('sha512', secret).update(req.rawBody).digest('hex');
-    if (expected !== signature) {
+    const expected = Buffer.from(crypto.createHmac('sha512', secret).update(req.rawBody).digest('hex'));
+    const received = Buffer.from(String(signature));
+    // Constant-time compare; timingSafeEqual needs equal lengths, so a length
+    // mismatch is rejected first (the length of a SHA-512 hex digest isn't secret).
+    if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) {
       return res.status(401).end();
     }
 

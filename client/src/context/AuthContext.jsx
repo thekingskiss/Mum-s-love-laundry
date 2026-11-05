@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
+import { SESSION_ENDED_EVENT } from '../lib/sessionEvents.js';
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = 'mll_token';
@@ -7,6 +8,14 @@ const TOKEN_KEY = 'mll_token';
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // The server revoked this login (deactivated account, changed password, or
+  // expired token): drop the session so the app sends the person to log in.
+  useEffect(() => {
+    const onSessionEnded = () => setUser(null);
+    window.addEventListener(SESSION_ENDED_EVENT, onSessionEnded);
+    return () => window.removeEventListener(SESSION_ENDED_EVENT, onSessionEnded);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY);

@@ -1,13 +1,16 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckCircle2, X, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
 import { useToastState } from '../context/ToastContext.jsx';
 
+// Semantic colour tokens (see index.css) adapt to every theme on their own.
 const VARIANT_STYLES = {
-  success: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300',
-  error: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300',
+  success: 'border-success-line bg-success-soft text-success',
+  warning: 'border-warning-line bg-warning-soft text-warning',
+  error: 'border-danger-line bg-danger-soft text-danger',
+  info: 'border-info-line bg-info-soft text-info',
 };
 
-const VARIANT_ICONS = { success: CheckCircle2, error: XCircle };
+const VARIANT_ICONS = { success: CheckCircle2, warning: AlertTriangle, error: XCircle, info: Info };
 
 export default function ToastContainer() {
   const { toasts, dismiss } = useToastState();

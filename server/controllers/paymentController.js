@@ -214,4 +214,22 @@ async function listAllPayments(req, res, next) {
   }
 }
 
-module.exports = { recordPayment, listOrderPayments, listAllPayments, NET_PAID_EXPR };
+// A customer's own payments across all their orders, newest first. Always
+// scoped to the signed-in user, so it takes no user or order id from the request.
+async function listMyPayments(req, res, next) {
+  try {
+    const result = await pool.query(
+      `SELECT p.id, p.order_id, p.amount, p.payment_method, p.payment_type, p.paid_at
+       FROM payments p
+       JOIN orders o ON o.id = p.order_id
+       WHERE o.user_id = $1
+       ORDER BY p.paid_at DESC, p.id DESC`,
+      [req.user.id]
+    );
+    res.json({ payments: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { recordPayment, listOrderPayments, listMyPayments, listAllPayments, NET_PAID_EXPR };

@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { recordAudit } = require('../services/auditLog');
 
 // Display-only conversion — all orders are always priced and stored in GHS.
 // Exchange rates are set manually by an admin, not pulled from a live feed.
@@ -54,6 +55,12 @@ async function updateCurrency(req, res, next) {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Currency not found.' });
     }
+    await recordAudit(req.user, {
+      action: 'currency.updated',
+      entityType: 'currency',
+      entityId: code,
+      summary: `Updated ${code}: rate ${result.rows[0].rate_to_ghs}, ${result.rows[0].is_active ? 'active' : 'inactive'}`,
+    });
     res.json({ currency: result.rows[0] });
   } catch (err) {
     next(err);

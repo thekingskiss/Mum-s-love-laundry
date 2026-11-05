@@ -10,7 +10,7 @@ const {
   sendReceipt,
 } = require('../controllers/orderController');
 const { listGarments, createGarment, updateGarment } = require('../controllers/garmentController');
-const { listOrderPayments } = require('../controllers/paymentController');
+const { listOrderPayments, listMyPayments } = require('../controllers/paymentController');
 const { getInvoiceForOrder } = require('../controllers/invoiceController');
 const { requireAuth, requireStaff } = require('../middleware/auth');
 
@@ -29,6 +29,8 @@ const receiptShareLimiter = rateLimit({
 
 router.post('/', requireAuth, createOrder);
 router.get('/user', requireAuth, listMyOrders);
+// Must stay above '/:id/payments', which would otherwise treat "user" as an order id.
+router.get('/user/payments', requireAuth, listMyPayments);
 router.get('/', requireAuth, requireStaff, listOrders);
 router.get('/:id', requireAuth, getOrder);
 router.get('/:id/history', requireAuth, getOrderHistory);

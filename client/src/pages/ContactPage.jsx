@@ -105,8 +105,8 @@ export default function ContactPage() {
           ) : (
             <form onSubmit={handleSubmit} className="mt-8 space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
-                <input
+                <label htmlFor="contact-name" className="mb-1 block text-sm font-medium text-slate-700">Name</label>
+                <input id="contact-name"
                   required
                   value={form.name}
                   onChange={update('name')}
@@ -115,8 +115,8 @@ export default function ContactPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
-                <input
+                <label htmlFor="contact-email" className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+                <input id="contact-email"
                   type="email"
                   required
                   value={form.email}
@@ -126,8 +126,8 @@ export default function ContactPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Message</label>
-                <textarea
+                <label htmlFor="contact-message" className="mb-1 block text-sm font-medium text-slate-700">Message</label>
+                <textarea id="contact-message"
                   required
                   rows={4}
                   value={form.message}

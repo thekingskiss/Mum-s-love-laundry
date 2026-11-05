@@ -1,8 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const pool = require('../config/db');
 const { storeAvatar, deleteAvatar } = require('../services/avatarStorage');
 const { isZoneSupported, getActiveZoneNames } = require('../utils/zones');
@@ -11,8 +9,12 @@ const { sendEmail } = require('../services/notify');
 const SALT_ROUNDS = 12;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.]{3,30}$/;
-const SUPPORTED_LANGUAGES = ['en', 'tw'];
-const SUPPORTED_THEMES = ['light', 'dark'];
+// Keep in step with client/src/lib/i18n.js.
+const SUPPORTED_LANGUAGES = ['en', 'tw', 'ga', 'ee', 'ha', 'dag', 'fr', 'zh', 'ar'];
+// Keep in step with client/src/lib/themes.js and migrate_v22_more_themes.sql.
+const SUPPORTED_THEMES = [
+  'light', 'gray', 'dark', 'graphite', 'midnight', 'contrast', 'contrast-dark', 'system',
+];
 
 function hashToken(rawToken) {
   return crypto.createHash('sha256').update(rawToken).digest('hex');
@@ -146,6 +148,11 @@ async function login(req, res, next) {
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) {
       return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+    // Checked after the password so this message can't be used to find out
+    // which emails have accounts.
+    if (user.is_active === false) {
+      return res.status(403).json({ error: 'This account has been deactivated. Please contact the shop.' });
     }
 
     const token = signToken(user);
@@ -438,7 +445,8 @@ async function resetPassword(req, res, next) {
 
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
     await pool.query(
-      'UPDATE users SET password_hash = $1, reset_token_hash = NULL, reset_token_expires_at = NULL WHERE id = $2',
+      `UPDATE users SET password_hash = $1, reset_token_hash = NULL, reset_token_expires_at = NULL,
+              password_changed_at = NOW() WHERE id = $2`,
       [password_hash, user.id]
     );
 

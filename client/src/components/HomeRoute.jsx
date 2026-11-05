@@ -1,8 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import LandingPage from '../pages/LandingPage.jsx';
-
-const STAFF_ROLES = ['laundry_staff', 'administrator', 'super_admin'];
+import { workspacePath } from '../lib/roles';
 
 // Signed-in users land on their dashboard instead of the marketing
 // homepage — the landing page is only for logged-out visitors. Gated on
@@ -20,7 +19,7 @@ export default function HomeRoute() {
   }
 
   if (user) {
-    return <Navigate to={STAFF_ROLES.includes(user.role) ? '/staff' : '/dashboard'} replace />;
+    return <Navigate to={workspacePath(user.role)} replace />;
   }
 
   return <LandingPage />;

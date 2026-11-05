@@ -10,10 +10,8 @@ import { useToast } from '../context/ToastContext.jsx';
 import InvoiceStatusPill from '../components/InvoiceStatusPill.jsx';
 import Skeleton from '../components/Skeleton.jsx';
 import { INVOICE_LINE_KINDS } from '../lib/invoices';
+import { ADMIN_ROLES, STAFF_ROLES, workspacePath } from '../lib/roles';
 import { SHOP_NAME } from '../lib/shopInfo.js';
-
-const STAFF_ROLES = ['laundry_staff', 'administrator', 'super_admin'];
-const ADMIN_ROLES = ['administrator', 'super_admin'];
 
 export default function InvoiceDetailPage() {
   const { id } = useParams();
@@ -418,7 +416,7 @@ export default function InvoiceDetailPage() {
       </div>
 
       <Link
-        to={isStaff ? '/staff' : '/dashboard'}
+        to={isStaff ? `${workspacePath(user.role)}?tab=orders` : '/dashboard'}
         className="mt-6 block text-center text-sm font-semibold text-slate-400 hover:text-brand-600"
       >
         ← Back
