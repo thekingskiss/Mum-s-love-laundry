@@ -12,7 +12,10 @@ const SALT_ROUNDS = 12;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.]{3,30}$/;
 const SUPPORTED_LANGUAGES = ['en', 'tw'];
-const SUPPORTED_THEMES = ['light', 'dark'];
+// Keep in step with client/src/lib/themes.js and migrate_v22_more_themes.sql.
+const SUPPORTED_THEMES = [
+  'light', 'gray', 'dark', 'graphite', 'midnight', 'contrast', 'contrast-dark', 'system',
+];
 
 function hashToken(rawToken) {
   return crypto.createHash('sha256').update(rawToken).digest('hex');
