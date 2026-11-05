@@ -99,15 +99,15 @@ describe('managing the price list', () => {
 });
 
 describe('admin overview', () => {
-  it('refuses laundry staff and customers', async () => {
+  it.each(['/api/admin/overview', '/api/admin/overview/activity'])('refuses laundry staff and customers: %s', async (path) => {
     for (const role of ['laundry_staff', 'customer']) {
-      const res = await request(app).get('/api/admin/overview').set('Authorization', `Bearer ${tokenFor(role)}`);
+      const res = await request(app).get(path).set('Authorization', `Bearer ${tokenFor(role)}`);
       expect(res.status).toBe(403);
     }
   });
 
-  it('requires a login', async () => {
-    const res = await request(app).get('/api/admin/overview');
+  it.each(['/api/admin/overview', '/api/admin/overview/activity'])('requires a login: %s', async (path) => {
+    const res = await request(app).get(path);
     expect(res.status).toBe(401);
   });
 });

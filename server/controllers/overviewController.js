@@ -82,6 +82,92 @@ async function getOverview(req, res, next) {
   }
 }
 
+const ACTIVITY_LIST_LIMIT = 5;
+
+// The charts and lists on the admin landing page. Separate from getOverview
+// because the sidebar badges refetch that on every tab change. Revenue and
+// branch scope use the same definitions as getOverview.
+async function getOverviewActivity(req, res, next) {
+  try {
+    const branchId = req.user.branch_id || req.query.branch_id || null;
+    const params = branchId ? [branchId] : [];
+    const inBranch = branchId ? 'AND o.branch_id = $1' : '';
+
+    const [comparison, trend, pipeline, recentOrders, pickups] = await Promise.all([
+      pool.query(
+        `SELECT
+           to_char(CURRENT_DATE, 'YYYY-MM-DD') AS today,
+           COALESCE(SUM(o.total_price) FILTER (
+             WHERE o.created_at >= date_trunc('week', LOCALTIMESTAMP) - INTERVAL '7 days'
+               AND o.created_at < LOCALTIMESTAMP - INTERVAL '7 days'
+           ), 0) AS revenue_last_week_to_date,
+           COUNT(*) FILTER (
+             WHERE o.created_at::date = CURRENT_DATE - 1 AND o.created_at < LOCALTIMESTAMP - INTERVAL '1 day'
+           ) AS orders_yesterday_to_date
+         FROM orders o
+         WHERE o.status != 'cancelled' ${inBranch}`,
+        params
+      ),
+      // Monday of last week through Sunday of this week, including days with no orders.
+      pool.query(
+        `SELECT to_char(d.day, 'YYYY-MM-DD') AS date,
+                COALESCE(SUM(o.total_price), 0) AS revenue,
+                COUNT(o.id) AS order_count
+         FROM generate_series(
+           date_trunc('week', LOCALTIMESTAMP) - INTERVAL '7 days',
+           date_trunc('week', LOCALTIMESTAMP) + INTERVAL '6 days',
+           INTERVAL '1 day'
+         ) AS d(day)
+         LEFT JOIN orders o ON o.created_at::date = d.day::date AND o.status != 'cancelled' ${inBranch}
+         GROUP BY d.day
+         ORDER BY d.day`,
+        params
+      ),
+      pool.query(
+        `SELECT o.status, COUNT(*) AS count
+         FROM orders o
+         WHERE o.status NOT IN ('completed', 'cancelled') ${inBranch}
+         GROUP BY o.status`,
+        params
+      ),
+      pool.query(
+        `SELECT o.id, o.status, o.total_price, o.created_at, u.full_name AS customer_name
+         FROM orders o
+         JOIN users u ON u.id = o.user_id
+         WHERE true ${inBranch}
+         ORDER BY o.created_at DESC, o.id DESC
+         LIMIT ${ACTIVITY_LIST_LIMIT}`,
+        params
+      ),
+      pool.query(
+        `SELECT o.id, o.status, u.full_name AS customer_name, CURRENT_DATE - o.pickup_date AS days_late
+         FROM orders o
+         JOIN users u ON u.id = o.user_id
+         WHERE o.status NOT IN ('completed', 'cancelled') AND o.pickup_date <= CURRENT_DATE ${inBranch}
+         ORDER BY o.pickup_date, o.id
+         LIMIT ${ACTIVITY_LIST_LIMIT}`,
+        params
+      ),
+    ]);
+
+    res.json({
+      today: comparison.rows[0].today,
+      revenue_last_week_to_date: Number(comparison.rows[0].revenue_last_week_to_date),
+      orders_yesterday_to_date: Number(comparison.rows[0].orders_yesterday_to_date),
+      trend: trend.rows.map((row) => ({
+        date: row.date,
+        revenue: Number(row.revenue),
+        order_count: Number(row.order_count),
+      })),
+      pipeline: pipeline.rows.map((row) => ({ status: row.status, count: Number(row.count) })),
+      recent_orders: recentOrders.rows.map((row) => ({ ...row, total_price: Number(row.total_price) })),
+      pickups: pickups.rows,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function listAuditLog(req, res, next) {
   try {
     const result = await pool.query(
@@ -98,4 +184,4 @@ async function listAuditLog(req, res, next) {
   }
 }
 
-module.exports = { getOverview, listAuditLog };
+module.exports = { getOverview, getOverviewActivity, listAuditLog };

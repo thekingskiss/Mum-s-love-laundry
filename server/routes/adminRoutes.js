@@ -14,8 +14,8 @@ const {
   runInvoiceRemindersNow,
   sendMessage,
 } = require('../controllers/adminController');
-const { getOverview, listAuditLog } = require('../controllers/overviewController');
 const { listStaff, createStaff } = require('../controllers/staffController');
+const { getOverview, getOverviewActivity, listAuditLog } = require('../controllers/overviewController');
 const { listZonesAdmin, createZone, updateZone } = require('../controllers/zoneController');
 const { listCapacity, setCapacity } = require('../controllers/capacityController');
 const { listItemsAdmin, createItem, updateItem } = require('../controllers/itemController');
@@ -80,6 +80,7 @@ router.delete('/invoices/:id', requireAuth, requireAdmin, voidInvoice);
 
 // Admin landing page figures and sidebar badges — administrators only.
 router.get('/overview', requireAuth, requireAdmin, getOverview);
+router.get('/overview/activity', requireAuth, requireAdmin, getOverviewActivity);
 
 // Who changed what — super admin only.
 router.get('/audit-log', requireAuth, requireSuperAdmin, listAuditLog);
