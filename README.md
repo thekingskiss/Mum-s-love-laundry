@@ -20,12 +20,13 @@ layered on top of the customer-facing app.
   reference only.
 - server/db/init.sql — fresh-install schema baseline, folded through v13.
 - server/db/migrate.js — checksummed, version-tracked migration runner; the
-  fresh-install path applies v14–v22 after the v13 baseline.
+  fresh-install path applies v14–v23 after the v13 baseline.
 - `server/db/migrate_v14_balance_reminders.sql`, `migrate_v15_invoices.sql`,
   `migrate_v16_branches.sql`, `migrate_v17_settings.sql`,
   `migrate_v18_late_fee_payments.sql`, `migrate_v19_backfill_branches.sql`,
-  `migrate_v20_audit_log.sql`, `migrate_v21_shop_time_zone.sql`, and
-  `migrate_v22_more_themes.sql` — schema changes after that baseline. v21 sets
+  `migrate_v20_audit_log.sql`, `migrate_v21_shop_time_zone.sql`,
+  `migrate_v22_more_themes.sql`, and `migrate_v23_naira.sql` — schema changes
+  after that baseline. v21 sets
   the database to `Africa/Accra`, so its dates follow the shop's calendar
   whatever zone the server is configured for. v22 lets `theme_preference` hold
   the newer colour themes (see `client/src/lib/themes.js`).
@@ -186,8 +187,9 @@ Every account (`/settings`) can manage:
   `darkMode: 'class'`). Coverage is thorough on the navbar, footer, dashboard,
   and settings page; other pages inherit a sane dark background/text color
   but haven't each had a dedicated dark-mode pass.
-- **Display currency** — `currencies` table holds manually-set exchange
-  rates against GHS (admin-editable via `PATCH /api/admin/currencies/:code`).
+- **Display currency** — GHS, USD, EUR, GBP, or NGN. The `currencies` table
+  holds manually-set exchange rates against GHS (admin-editable via
+  `PATCH /api/admin/currencies/:code`; there's no screen for this yet).
   Selecting a currency only changes how prices are *displayed* (Dashboard,
   Admin → Customers); every order is still created and charged in GHS —
   there's no live FX feed or multi-currency payment involved.
