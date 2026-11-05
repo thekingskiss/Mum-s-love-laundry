@@ -89,6 +89,71 @@ describe('customer dashboard pages', () => {
     expect(screen.queryByRole('button', { name: /mark all read/i })).not.toBeInTheDocument();
   });
 
+  describe('Pricing', () => {
+    const ITEMS = [
+      { id: 1, category: 'Bedding', item_name: 'Duvet', unit_price: '40.00', price_min: null, price_max: null, is_active: true },
+      { id: 2, category: 'Bedding', item_name: 'Bathroom Mat', unit_price: null, price_min: '10.00', price_max: '20.00', is_active: true },
+      { id: 3, category: 'Formal', item_name: 'Kaftan', unit_price: '35.00', price_min: null, price_max: null, is_active: true },
+    ];
+
+    beforeEach(() => {
+      api.post.mockReset();
+      const others = api.get.getMockImplementation();
+      api.get.mockImplementation((url, ...rest) =>
+        url === '/items' ? Promise.resolve({ data: { items: ITEMS } }) : others(url, ...rest)
+      );
+    });
+
+    it('lists prices and ranges by category', async () => {
+      renderAt('/dashboard?tab=pricing');
+      expect(await screen.findByText('Duvet')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Pricing' })).toBeInTheDocument();
+      expect(screen.getByText('GHS 40.00')).toBeInTheDocument();
+      expect(screen.getByText('Bathroom Mat').closest('tr')).toHaveTextContent('GHS 10.00 – GHS 20.00');
+      expect(screen.getByRole('heading', { name: 'Bedding (2)' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Formal (1)' })).toBeInTheDocument();
+    });
+
+    it('uses the public list, never the staff one', async () => {
+      renderAt('/dashboard?tab=pricing');
+      await screen.findByText('Duvet');
+      expect(api.get).toHaveBeenCalledWith('/items');
+      expect(api.get).not.toHaveBeenCalledWith('/admin/items');
+    });
+
+    it('gives customers no way to change a price', async () => {
+      renderAt('/dashboard?tab=pricing');
+      await screen.findByText('Duvet');
+      for (const name of [/^edit/i, /^deactivate/i, /^activate/i, /add item/i, /^save/i]) {
+        expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+      }
+      expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('textbox')).toHaveLength(1);
+      expect(api.patch).not.toHaveBeenCalledWith(expect.stringContaining('/items'), expect.anything());
+      expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it('searches by item or category', async () => {
+      renderAt('/dashboard?tab=pricing');
+      await screen.findByText('Duvet');
+      fireEvent.change(screen.getByLabelText('Search the price list'), { target: { value: 'formal' } });
+      expect(screen.getByText('Kaftan')).toBeInTheDocument();
+      expect(screen.queryByText('Duvet')).not.toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Search the price list'), { target: { value: 'nothing like this' } });
+      expect(screen.getByText('No items match.')).toBeInTheDocument();
+    });
+
+    it('says so when the list cannot load', async () => {
+      const others = api.get.getMockImplementation();
+      api.get.mockImplementation((url, ...rest) =>
+        url === '/items' ? Promise.reject(new Error('down')) : others(url, ...rest)
+      );
+      renderAt('/dashboard?tab=pricing');
+      expect(await screen.findByText('Unable to load the price list right now.')).toBeInTheDocument();
+    });
+  });
+
   it('falls back to the summary for an unknown page', async () => {
     renderAt('/dashboard?tab=nonsense');
     expect(await screen.findByRole('heading', { name: 'Current orders' })).toBeInTheDocument();
@@ -113,6 +178,7 @@ describe('customer sidebar', () => {
     ['/dashboard', 'Dashboard'],
     ['/dashboard?tab=orders', 'My Orders'],
     ['/dashboard?tab=payments', 'Payments'],
+    ['/dashboard?tab=pricing', 'Pricing'],
     ['/dashboard?tab=notifications', 'Notifications'],
     ['/book', 'Book an Order'],
   ])('highlights only the matching item at %s', (path, label) => {

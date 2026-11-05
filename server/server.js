@@ -19,6 +19,8 @@ const paystackRoutes = require('./routes/paystackRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const branchRoutes = require('./routes/branchRoutes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
+const pool = require('./config/db');
+const { logger, requestLogger } = require('./utils/logger');
 
 // A weak or missing signing secret compromises every account on the system
 // (anyone could forge an admin token), so refuse to boot with one in
@@ -26,10 +28,10 @@ const { notFound, errorHandler } = require('./middleware/errorHandler');
 // still works out of the box for local setup.
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
   if (process.env.NODE_ENV === 'production') {
-    console.error('FATAL: JWT_SECRET is missing or too short. Set it to a long, random value (32+ characters) before starting in production.');
+    logger.error('FATAL: JWT_SECRET is missing or too short. Set it to a long, random value (32+ characters) before starting in production.');
     process.exit(1);
   } else {
-    console.warn('WARNING: JWT_SECRET is missing or short. Set a long, random value before deploying to production.');
+    logger.warn('WARNING: JWT_SECRET is missing or short. Set a long, random value before deploying to production.');
   }
 }
 
@@ -37,7 +39,7 @@ if (
   process.env.NODE_ENV === 'production' &&
   (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET)
 ) {
-  console.error('FATAL: Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET for production avatar storage.');
+  logger.error('FATAL: Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET for production avatar storage.');
   process.exit(1);
 }
 const app = express();
@@ -46,6 +48,7 @@ const app = express();
 // TLS) so req.ip and rate-limiting see the real client address.
 app.set('trust proxy', 1);
 
+app.use(requestLogger);
 app.use(helmet());
 
 const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map((o) => o.trim());
@@ -75,7 +78,20 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
+// Reports ok only when the database answers, so a load balancer or uptime
+// monitor notices a database outage instead of seeing a healthy-looking API.
+app.get('/health', async (req, res) => {
+  try {
+    await Promise.race([
+      pool.query('SELECT 1'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('database check timed out')), 3000)),
+    ]);
+    res.json({ status: 'ok', database: 'up' });
+  } catch (err) {
+    logger.error('health check failed', { error: err });
+    res.status(503).json({ status: 'degraded', database: 'down' });
+  }
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/services', serviceRoutes);
@@ -96,14 +112,37 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 4000;
 const server = app.listen(PORT, () => {
-  console.log(`Mum's Love Laundry API listening on port ${PORT}`);
+  logger.info(`Mum's Love Laundry API listening on port ${PORT}`);
 });
 
 // Without this, `node --watch` restarts leave the old process's listening
 // socket bound just long enough that the new process's app.listen() loses
-// the race and dies with EADDRINUSE.
+// the race and dies with EADDRINUSE. It also lets in-flight requests finish
+// and returns database connections before the process exits.
+let shuttingDown = false;
 function shutdown() {
-  server.close(() => process.exit(0));
+  if (shuttingDown) return;
+  shuttingDown = true;
+  // Don't hang forever on a stuck connection.
+  setTimeout(() => process.exit(1), 10000).unref();
+  server.close(async () => {
+    try {
+      await pool.end();
+    } catch (err) {
+      logger.error('error closing the database pool', { error: err });
+    }
+    process.exit(0);
+  });
 }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+// A rejected promise nobody awaited, or an unexpected throw, leaves the process
+// in an unknown state. Log it, then exit so the process manager restarts it.
+process.on('unhandledRejection', (reason) => {
+  logger.error('unhandled promise rejection', { error: reason });
+});
+process.on('uncaughtException', (err) => {
+  logger.error('uncaught exception', { error: err });
+  process.exit(1);
+});

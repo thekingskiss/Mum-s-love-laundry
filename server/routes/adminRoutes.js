@@ -14,8 +14,8 @@ const {
   runInvoiceRemindersNow,
   sendMessage,
 } = require('../controllers/adminController');
-const { listStaff, createStaff } = require('../controllers/staffController');
 const { getOverview, getOverviewActivity, listAuditLog } = require('../controllers/overviewController');
+const { listStaff, createStaff, updateStaff, setStaffActive, resetStaffPassword } = require('../controllers/staffController');
 const { listZonesAdmin, createZone, updateZone } = require('../controllers/zoneController');
 const { listCapacity, setCapacity } = require('../controllers/capacityController');
 const { listItemsAdmin, createItem, updateItem } = require('../controllers/itemController');
@@ -89,6 +89,12 @@ router.get('/audit-log', requireAuth, requireSuperAdmin, listAuditLog);
 // accounts is a super admin decision.
 router.get('/staff', requireAuth, requireAdmin, listStaff);
 router.post('/staff', requireAuth, requireSuperAdmin, createStaff);
+// Managing existing accounts. Administrators may switch laundry staff in their
+// own branch on or off and reset their passwords; roles and branches stay with
+// the super admin. The full rules live in utils/staffRules.js.
+router.patch('/staff/:id', requireAuth, requireSuperAdmin, updateStaff);
+router.patch('/staff/:id/active', requireAuth, requireAdmin, setStaffActive);
+router.post('/staff/:id/password', requireAuth, requireAdmin, resetStaffPassword);
 
 // Branches — super admin only (managing/opening a new location is a
 // business-level decision, not a day-to-day admin task).
@@ -105,9 +111,10 @@ router.patch('/zones/:id', requireAuth, requireAdmin, updateZone);
 router.get('/capacity', requireAuth, requireAdmin, listCapacity);
 router.post('/capacity', requireAuth, requireAdmin, setCapacity);
 
-// Laundry item catalog (the real price list) — administrators manage it, and
-// every change is recorded in the audit log.
-router.get('/items', requireAuth, requireAdmin, listItemsAdmin);
+// Laundry item catalog (the real price list) — all staff can read it, including
+// inactive items. Only administrators can change it, and every change is
+// recorded in the audit log.
+router.get('/items', requireAuth, requireStaff, listItemsAdmin);
 router.post('/items', requireAuth, requireAdmin, createItem);
 router.patch('/items/:id', requireAuth, requireAdmin, updateItem);
 

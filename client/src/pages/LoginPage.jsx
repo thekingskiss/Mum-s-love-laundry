@@ -3,12 +3,14 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useLanguage } from '../context/LanguageContext.jsx';
 import { STAFF_ROLES, workspacePath } from '../lib/roles';
 import mllLogo from '../assets/mll-logo.png';
 import loginBgImage from '../assets/login-bg-laundromat.jpg';
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -36,7 +38,7 @@ export default function LoginPage() {
     } catch (err) {
       setError(
         err.response?.data?.error ||
-          'Unable to log in. Please try again.'
+          t('login_error')
       );
     } finally {
       setSubmitting(false);
@@ -68,21 +70,21 @@ export default function LoginPage() {
           />
 
           <h1 className="mt-4 font-display text-2xl font-semibold text-ink-900">
-            Welcome back
+            {t('login_welcome')}
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Log in to track your orders and book a drop-off.
+            {t('login_subtitle')}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Email
+            <label htmlFor="login-email" className="mb-1 block text-sm font-medium text-slate-700">
+              {t('login_email')}
             </label>
 
-            <input
+            <input id="login-email"
               type="email"
               required
               value={form.email}
@@ -99,19 +101,20 @@ export default function LoginPage() {
 
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <label className="block text-sm font-medium text-slate-700">
-                Password
+              <label htmlFor="login-password" className="block text-sm font-medium text-slate-700">
+                {t('login_password')}
               </label>
 
               <Link
                 to="/forgot-password"
                 className="text-xs font-semibold text-brand-600 hover:text-brand-700"
               >
-                Forgot password?
+                {t('login_forgot')}
               </Link>
             </div>
 
             <input
+              id="login-password"
               type="password"
               required
               value={form.password}
@@ -150,17 +153,17 @@ export default function LoginPage() {
               />
             )}
 
-            {submitting ? 'Logging in...' : 'Log In'}
+            {submitting ? t('login_submitting') : t('nav_login')}
           </motion.button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500">
-          Don't have an account?{' '}
+          {t('login_no_account')}{' '}
           <Link
             to="/register"
             className="font-semibold text-brand-600 hover:text-brand-700"
           >
-            Sign up
+            {t('nav_signup')}
           </Link>
         </p>
       </div>

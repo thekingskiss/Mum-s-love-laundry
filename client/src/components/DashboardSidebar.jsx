@@ -47,6 +47,11 @@ const customerItems = [
     icon: Package,
   },
   {
+    label: 'Pricing',
+    to: '/dashboard?tab=pricing',
+    icon: Percent,
+  },
+  {
     label: 'My Orders',
     to: '/dashboard?tab=orders',
     icon: ClipboardList,
@@ -71,6 +76,7 @@ const staffItems = [
   { label: 'Customers', tab: 'customers', icon: Users },
   { label: 'Messages', tab: 'messages', icon: Mail },
   { label: 'Invoices', tab: 'invoices', icon: FileText },
+  { label: 'Pricing', tab: 'pricing', icon: Percent },
 ];
 
 // badge names a field of GET /admin/overview. Opening one group closes the
@@ -100,7 +106,7 @@ const adminGroups = [
     items: [
       { label: 'Branches', tab: 'branches', icon: Building2, superAdminOnly: true },
       { label: 'Pricing', tab: 'pricing', icon: Percent },
-      { label: 'Staff accounts', tab: 'staff', icon: Users, superAdminOnly: true },
+      { label: 'Staff accounts', tab: 'staff', icon: Users },
       { label: 'Zones', tab: 'zones', icon: MapPin },
       { label: 'Capacity', tab: 'capacity', icon: CalendarDays },
       { label: 'Audit log', tab: 'audit', icon: History, superAdminOnly: true },
@@ -117,13 +123,13 @@ function CountBadge({ count, compact }) {
     return (
       <span
         aria-label={`${count} need attention`}
-        className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500"
+        className="absolute end-1 top-1 h-2 w-2 rounded-full bg-red-500"
       />
     );
   }
 
   return (
-    <span className="ml-auto shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold leading-none text-red-700 dark:bg-red-950/60 dark:text-red-300">
+    <span className="ms-auto shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold leading-none text-red-700 dark:bg-red-950/60 dark:text-red-300">
       {text}
     </span>
   );
@@ -142,7 +148,7 @@ function SidebarButton({ item, active, showLabels, badge, adminAccent, onClick }
       title={!showLabels ? item.label : undefined}
       aria-current={active ? 'page' : undefined}
       className={[
-        'group relative flex w-full items-center rounded-xl px-3 text-left text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
+        'group relative flex w-full items-center rounded-xl px-3 text-start text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
         adminAccent ? 'py-2' : 'py-2.5',
         showLabels ? 'gap-3' : 'justify-center',
         active
@@ -247,7 +253,7 @@ function AdminNav({ isSuperAdmin, showLabels, onNavigate }) {
               >
                 <span>{group.label}</span>
                 {!open && <CountBadge count={hiddenCount} />}
-                <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition ${open ? 'rotate-180' : ''} ${!open && hiddenCount ? '' : 'ml-auto'}`} />
+                <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition ${open ? 'rotate-180' : ''} ${!open && hiddenCount ? '' : 'ms-auto'}`} />
               </button>
             ) : (
               <div className="mx-3 mb-2 h-px bg-slate-200 dark:bg-slate-800" />
@@ -359,7 +365,7 @@ export default function DashboardSidebar() {
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
-          className="fixed left-4 top-4 z-40 rounded-xl border border-slate-200 bg-white p-2.5 text-slate-700 shadow-lg transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 md:hidden"
+          className="fixed start-4 top-4 z-40 rounded-xl border border-slate-200 bg-white p-2.5 text-slate-700 shadow-lg transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 md:hidden"
           aria-label="Open dashboard menu"
           aria-expanded={false}
           aria-controls="dashboard-sidebar"
@@ -382,12 +388,12 @@ export default function DashboardSidebar() {
       <aside
         id="dashboard-sidebar"
         className={[
-          'fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-200 bg-white shadow-xl transition-all duration-300 dark:border-slate-800 dark:bg-slate-900',
+          'fixed inset-y-0 start-0 z-50 flex w-72 flex-col border-e border-slate-200 bg-white shadow-xl transition-all duration-300 dark:border-slate-800 dark:bg-slate-900',
           'md:sticky md:top-0 md:z-30 md:h-screen',
           sidebarWidth,
           mobileOpen
             ? 'translate-x-0'
-            : '-translate-x-full md:translate-x-0',
+            : '-translate-x-full rtl:translate-x-full md:translate-x-0 md:rtl:translate-x-0',
         ].join(' ')}
         aria-label="Dashboard navigation"
       >
@@ -397,7 +403,7 @@ export default function DashboardSidebar() {
             <button
               type="button"
               onClick={handleLogoNavigation}
-              className="flex min-w-0 items-center gap-3 rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+              className="flex min-w-0 items-center gap-3 rounded-xl text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
               aria-label={
                 isStaff
                   ? "Go to Mum's Love staff dashboard"

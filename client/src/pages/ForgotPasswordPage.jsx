@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import api from '../api/axios';
+import { useLanguage } from '../context/LanguageContext.jsx';
 import mllLogo from '../assets/mll-logo.png';
 
 export default function ForgotPasswordPage() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -18,7 +20,7 @@ export default function ForgotPasswordPage() {
       const { data } = await api.post('/auth/forgot-password', { email });
       setResult(data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to process that request. Please try again.');
+      setError(err.response?.data?.error || t('forgot_err'));
     } finally {
       setSubmitting(false);
     }
@@ -29,8 +31,8 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md rounded-2xl border border-slate-100 bg-white p-8 shadow-soft">
         <div className="flex flex-col items-center text-center">
           <img src={mllLogo} alt="Mum's Love Laundry" className="h-14 w-auto" />
-          <h1 className="mt-4 font-display text-2xl font-semibold text-ink-900">Reset your password</h1>
-          <p className="mt-1 text-sm text-slate-500">Enter your email and we'll send you a reset link.</p>
+          <h1 className="mt-4 font-display text-2xl font-semibold text-ink-900">{t('forgot_title')}</h1>
+          <p className="mt-1 text-sm text-slate-500">{t('forgot_subtitle')}</p>
         </div>
 
         {result ? (
@@ -55,8 +57,8 @@ export default function ForgotPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
-              <input
+              <label htmlFor="forgot-password-email" className="mb-1 block text-sm font-medium text-slate-700">{t('login_email')}</label>
+              <input id="forgot-password-email"
                 type="email"
                 required
                 value={email}
@@ -74,14 +76,14 @@ export default function ForgotPasswordPage() {
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"
             >
               {submitting && <Loader2 size={16} className="animate-spin" />}
-              Send Reset Link
+              {t('forgot_submit')}
             </button>
           </form>
         )}
 
         <p className="mt-6 text-center text-sm text-slate-500">
           <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">
-            Back to log in
+            {t('forgot_back')}
           </Link>
         </p>
       </div>

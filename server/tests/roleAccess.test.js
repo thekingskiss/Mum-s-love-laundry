@@ -1,20 +1,21 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import request from 'supertest';
+import { installFakeDb } from './helpers/fakeDb';
+import { SECRET, tokenFor, answerAccountLookups } from './helpers/accounts';
 
-// Every request here is refused by the role check, before any controller or
-// database call, so no test database is needed.
-const SECRET = 'role-access-test-secret';
-
-function tokenFor(role) {
-  return jwt.sign({ id: 1, email: 'a@example.com', role, branch_id: 1 }, SECRET);
-}
-
+// Every request here is refused by the role check or by validation, before any
+// controller query runs. The only query is the account lookup that requireAuth
+// does, which the fake database answers.
 let app;
+let db;
+
+afterAll(() => db?.restore());
 
 beforeAll(async () => {
   process.env.JWT_SECRET = SECRET;
+  db = installFakeDb();
+  answerAccountLookups(db);
   const { default: adminRoutes } = await import('../routes/adminRoutes');
   const { default: serviceRoutes } = await import('../routes/serviceRoutes');
   app = express();
@@ -56,10 +57,23 @@ describe('managing the price list', () => {
     expect((await asRole(role, 'patch', '/api/admin/items/1').send({ unit_price: -1 })).status).toBe(400);
   });
 
-  it.each(['laundry_staff', 'customer'])('refuses %s', async (role) => {
-    expect((await asRole(role, 'get', '/api/admin/items')).status).toBe(403);
-    expect((await asRole(role, 'post', '/api/admin/items').send({})).status).toBe(403);
-    expect((await asRole(role, 'patch', '/api/admin/items/1').send({})).status).toBe(403);
+  // These bodies are valid, so the only thing that can stop them is the role check.
+  it.each(['laundry_staff', 'customer'])('refuses to let %s change anything', async (role) => {
+    const newItem = { category: 'Towels', item_name: 'Mat', unit_price: 5 };
+    expect((await asRole(role, 'post', '/api/admin/items').send(newItem)).status).toBe(403);
+    expect((await asRole(role, 'patch', '/api/admin/items/1').send({ unit_price: 5 })).status).toBe(403);
+    expect((await asRole(role, 'patch', '/api/admin/items/1').send({ item_name: 'Mat' })).status).toBe(403);
+    expect((await asRole(role, 'patch', '/api/admin/items/1').send({ is_active: false })).status).toBe(403);
+  });
+
+  // Getting past the role check reaches the database, which this file doesn't
+  // need to be running: any answer other than 403 means staff were let through.
+  it('lets laundry staff read the full list', async () => {
+    expect((await asRole('laundry_staff', 'get', '/api/admin/items')).status).not.toBe(403);
+  });
+
+  it('keeps the staff list from customers', async () => {
+    expect((await asRole('customer', 'get', '/api/admin/items')).status).toBe(403);
   });
 
   it.each([

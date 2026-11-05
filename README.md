@@ -16,17 +16,18 @@ layered on top of the customer-facing app.
   a multi-page marketing site (Home/About/Services/Pricing/Blog/Contact),
   auth pages, a multi-step booking wizard (item cart + drop-off date), a
   customer dashboard, and a role-gated staff dashboard.
-- `supabase/schema.sql` — the deprecated v1.0 Supabase schema, kept for
-  reference only.
 - server/db/init.sql — fresh-install schema baseline, folded through v13.
 - server/db/migrate.js — checksummed, version-tracked migration runner; the
-  fresh-install path applies v14–v23 after the v13 baseline.
+  fresh-install path applies v14–v24 after the v13 baseline.
 - `server/db/migrate_v14_balance_reminders.sql`, `migrate_v15_invoices.sql`,
   `migrate_v16_branches.sql`, `migrate_v17_settings.sql`,
   `migrate_v18_late_fee_payments.sql`, `migrate_v19_backfill_branches.sql`,
   `migrate_v20_audit_log.sql`, `migrate_v21_shop_time_zone.sql`,
-  `migrate_v22_more_themes.sql`, and `migrate_v23_naira.sql` — schema changes
-  after that baseline. v21 sets
+  `migrate_v22_more_themes.sql`, `migrate_v23_naira.sql`, and
+  `migrate_v24_account_status.sql` — schema changes
+  after that baseline. v24 adds `users.is_active`, `deactivated_at` and
+  `password_changed_at` (account deactivation and sign-out on password change).
+  v21 sets
   the database to `Africa/Accra`, so its dates follow the shop's calendar
   whatever zone the server is configured for. v22 lets `theme_preference` hold
   the newer colour themes (see `client/src/lib/themes.js`).
@@ -45,8 +46,8 @@ layered on top of the customer-facing app.
    string**. Use the **Session pooler** URI for this long-running API and worker;
    put it in `server/.env` as `DATABASE_URL`. TLS is enabled automatically.
    This version keeps its existing PostgreSQL schema and custom JWT auth. Do
-   not use the deprecated `supabase/schema.sql` or the Supabase client-side
-   anon key.
+   not use the Supabase client-side anon key; the API talks to the database
+   directly.
 
    For local PostgreSQL, create the empty database with your locally
    configured PostgreSQL administrator credentials:
@@ -104,8 +105,8 @@ Log out and back in (JWTs carry the role at issue-time). From there, use
 
 | Role              | Can do                                                              |
 |-------------------|----------------------------------------------------------------------|
-| `customer`        | Place orders, track them, cancel before processing starts.          |
-| `laundry_staff`   | Advance orders through washing/ironing/QC/ready stages; manage garment tags. |
+| `customer`        | Place orders, track them, cancel before processing starts; view active prices, without changing them. |
+| `laundry_staff`   | Advance orders through washing/ironing/QC/ready stages; manage garment tags; view the full price list, without changing it. |
 | `administrator`   | Everything staff can, plus analytics, payments, inventory, expenses, zones, and capacity for their branch, and the price list, which is shared by all branches. |
 | `super_admin`     | Everything an administrator can across all branches, plus branches, display currency rates, staff accounts, and the audit log. |
 
@@ -135,8 +136,10 @@ items (e.g. Bathroom Mat, Wedding Dress Small) are range-priced — the
 order uses the low end as an estimate, flagged `is_price_estimated`, with
 the exact price confirmed at drop-off. Administrators and super admins manage
 the whole catalog — names, categories, prices, ranges, new items,
-activate/deactivate — from Admin → Pricing. Prices apply to every branch, and
-orders already placed keep the price they were placed at.
+activate/deactivate — from Admin → Pricing. Laundry staff see the same list
+from Staff → Pricing but can't change it, and customers see active prices on the
+public Pricing page and under Pricing in their dashboard. Prices apply to every branch, and orders already placed keep
+the price they were placed at.
 
 The old `services` table (Washing Only / Ironing Only / Wash & Iron / Dry
 Cleaning) still exists and powers the descriptive cards on the public
@@ -300,7 +303,8 @@ a running record an admin can add to and delete from.
 | POST   | `/api/auth/profile/avatar`         | User        | Upload/replace profile picture (multipart).    |
 | GET    | `/api/currencies`                  | Public      | List active display currencies + rates.        |
 | GET    | `/api/items`                       | Public      | List active laundry items with pricing.        |
-| GET/POST | `/api/admin/items`               | Admin/Super admin | List all / create catalog items.               |
+| GET    | `/api/admin/items`                 | Staff       | List every catalog item, including inactive ones. |
+| POST   | `/api/admin/items`                 | Admin/Super admin | Create a catalog item.                         |
 | PATCH  | `/api/admin/items/:id`             | Admin/Super admin | Update an item's name, category, price/range or active state. |
 | GET    | `/api/services`                    | Public      | List descriptive service categories (marketing only). |
 | GET    | `/api/zones`                       | Public      | List active customer areas (informational).    |
@@ -320,6 +324,9 @@ a running record an admin can add to and delete from.
 | GET/POST | `/api/orders/:orderId/garments`  | Staff       | List/tag garments for an order.                |
 | PATCH  | `/api/orders/garments/:id`         | Staff       | Update a garment tag's status/notes.           |
 | GET/POST | `/api/admin/staff`               | Admin/Super admin | List (admin) / create staff accounts (super admin). |
+| PATCH  | `/api/admin/staff/:id`             | Super admin | Change a staff member's role or branch. |
+| PATCH  | `/api/admin/staff/:id/active`      | Admin/Super admin | Deactivate or reactivate an account (`{ "active": false }`); effective immediately. Administrators: their own branch's laundry staff only. |
+| POST   | `/api/admin/staff/:id/password`    | Admin/Super admin | Reset a staff password; signs that person out everywhere. Same scope as above. |
 | GET/POST/PATCH | `/api/admin/zones`           | Admin       | Manage customer areas (informational).         |
 | GET/POST | `/api/admin/capacity`            | Admin       | Manage daily order caps.                       |
 | GET/PATCH | `/api/admin/currencies`         | Admin/Super admin | List (admin) / edit display rates (super admin). |
@@ -404,18 +411,33 @@ same 7-day window — a liability boundary, not just a fee.
 
 ## Security
 
-- Passwords are hashed with `bcryptjs` (10 salt rounds); sessions are
-  short-lived JWTs (7 days) carrying `id`/`role`, verified on every request
-  by `server/middleware/auth.js`.
-- All database access goes through parameterized `pg` queries — no string-built
-  SQL, so there's no SQL-injection surface.
+- Passwords are hashed with `bcryptjs` (12 salt rounds). Sessions are JWTs
+  that last 7 days, but the token only proves who someone is: on **every
+  request** `server/middleware/auth.js` reads the account's current role,
+  branch and active status from the database. So deactivating an account or
+  changing its role takes effect immediately, and a token issued before the
+  account's last password change or reset is refused.
+- Staff accounts can be switched off (not deleted, so orders, payments and the
+  audit log keep their history), moved between roles, and have their passwords
+  reset by a super admin. Every such change is written to the audit log. The
+  rules live in `server/utils/staffRules.js`: nobody changes their own account,
+  super admin accounts can't be changed through the API (so the shop can't lock
+  itself out), and an administrator can only switch laundry staff in their own
+  branch on or off.
+- Database values are always passed as bound `pg` parameters, never joined into
+  SQL text. The few dynamic queries only assemble fixed fragments (a `WHERE`
+  built from a list of conditions, each using `$1`, `$2`, ...).
 - Role-based access control (`requireAuth`/`requireStaff`/`requireAdmin`) gates
   every staff/admin route server-side, independent of what the UI shows.
 - `helmet()` sets standard security headers (including a default CSP) on
   every response; `express-rate-limit` caps general API traffic (300
-  req/15min) and applies a tighter limit (10 req/15min) to
-  `/api/auth/register|login|forgot-password|reset-password` to slow down
-  credential-guessing and account enumeration.
+  req/15min). The sign-in endpoints have two limits: a generous per-IP one
+  (60 req/15min, since customers on one mobile network share an IP address)
+  and a strict per-account one (10 req/15min on login and forgot-password,
+  keyed by the email being attacked) to stop password guessing.
+- The Paystack webhook is accepted only with a valid HMAC signature
+  (compared in constant time), and every payment is re-verified with Paystack
+  before it is recorded; the amount recorded is Paystack's, never the caller's.
 - The JWT is kept in `localStorage` (not an httpOnly cookie) for simplicity —
   this means it's readable by any script that runs on the page, so the CSP
   from `helmet` is the main defense against token theft via injected script.
@@ -425,6 +447,66 @@ same 7-day window — a liability boundary, not just a fee.
   serves this in production (a reverse proxy like Nginx, or a host with
   managed TLS like Render/Railway/Fly) must terminate TLS in front of it;
   `app.set('trust proxy', 1)` in `server.js` assumes exactly that setup.
+
+## Testing, linting and CI
+
+```
+cd server && npm test        # API tests (no database needed: queries are faked)
+cd client && npm test        # component and unit tests
+cd server && npm run lint    # ESLint
+cd client && npm run lint
+```
+
+The server tests run the real routes and middleware against a scripted fake
+database (`server/tests/helpers/fakeDb.js`), so they need no PostgreSQL and run
+in seconds. They cover sign-in and account status, role access, staff
+management, payments (including refunds and storage fees), the Paystack webhook
+and its duplicate-payment handling, orders, and invoices. The client tests cover
+the sign-in, route guards, API client, navigation, payment callback and staff
+screens.
+
+**End-to-end tests** (`e2e/`) drive a real browser through the real API and a
+production build of the web app, against a throwaway database:
+
+```
+cd e2e && npm install        # once
+cd e2e && npm test           # builds the app, resets the test database, runs the browser tests
+```
+
+They cover signing in (right and wrong passwords, role-based landing pages,
+redirects for signed-out visitors, French and right-to-left Arabic) and the
+staff-account controls: deactivating a signed-in person signs them out and
+blocks them from logging back in, a password reset ends their old session, and
+administrators and customers are limited to what their role allows.
+
+The suite is isolated from your real data on purpose. It uses its own database,
+`mums_love_laundry_e2e` (it refuses to run against any name not ending in
+`_e2e`), its own ports (API 4100, web 5273), and forces `DATABASE_URL` empty so
+a hosted database in `server/.env` is never touched. The database is dropped and
+rebuilt at the start of every run; you can drop it yourself at any time. Locally
+it uses the Chrome you already have; in CI it installs Chromium. The first run
+builds the client, which takes a couple of minutes on a small machine.
+
+`.github/workflows/ci.yml` runs lint, both test suites, the end-to-end tests,
+the client build and a dependency audit on every push and pull request. Formatting follows
+`.editorconfig` and `.prettierrc`; the existing code was not bulk-reformatted.
+
+> The client tests run one file at a time (`maxWorkers: 1`) because jsdom
+> workers can time out starting on slow Windows machines. A full run takes a
+> few minutes.
+
+## Logging and health
+
+The API writes one line per request (method, path without the query string,
+status, duration) and logs unexpected errors with their stack. Set
+`LOG_LEVEL` (`error`, `warn`, `info`, `debug`; default `info`) and
+`LOG_FORMAT=json` for log aggregators; production uses JSON automatically.
+Never log passwords, tokens or request bodies.
+
+`GET /health` returns `200 {"status":"ok","database":"up"}` only when the
+database answers, and `503` otherwise, so an uptime monitor or load balancer
+notices a database outage. On `SIGTERM`/`SIGINT` the API finishes in-flight
+requests and closes its database connections before exiting.
 
 ## Backups
 
@@ -441,7 +523,12 @@ Restore with:
 ```
 
 A daily dump (e.g. via Windows Task Scheduler) kept for at least 30 days is a
-reasonable starting point. Development avatars in server/uploads/avatars/ are
+reasonable starting point. A backup you have never restored is only a hope:
+restore the latest dump into a scratch database (`createdb mums_love_laundry_check`,
+then `pg_restore -d mums_love_laundry_check ...`) every so often and check that
+`SELECT count(*) FROM orders;` looks right. On a hosted database (e.g. Supabase)
+use the provider's scheduled backups as well, and take a dump before applying
+any migration with `npm run db:migrate`. Development avatars in server/uploads/avatars/ are
 not covered by database backups; include that folder in local backups. Production
 avatars are stored in Cloudinary and are managed separately from PostgreSQL backups.
 

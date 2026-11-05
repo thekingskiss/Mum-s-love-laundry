@@ -677,6 +677,8 @@ async function getPublicInvoice(req, res, next) {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Invoice not found.' });
     }
+    // Left out on purpose: the public page must not reveal who owns or created it.
+    // eslint-disable-next-line no-unused-vars
     const { order_owner_id, created_by, ...invoice } = result.rows[0];
 
     const items = await pool.query(

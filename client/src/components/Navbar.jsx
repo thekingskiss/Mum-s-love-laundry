@@ -154,7 +154,7 @@ export default function Navbar() {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: -6 }}
                     transition={{ duration: 0.15, ease: 'easeOut' }}
-                    className="absolute right-0 top-full mt-2 w-48 origin-top-right overflow-hidden rounded-lg border border-slate-100 bg-white py-1.5 shadow-soft dark:border-slate-700 dark:bg-slate-800"
+                    className="absolute end-0 top-full mt-2 w-48 origin-top-right overflow-hidden rounded-lg border border-slate-100 bg-white py-1.5 shadow-soft dark:border-slate-700 dark:bg-slate-800"
                   >
                     <Link
                       to="/settings"
@@ -165,7 +165,7 @@ export default function Navbar() {
                     </Link>
                     <button
                       onClick={handleLogout}
-                      className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"
+                      className="flex w-full items-center gap-2.5 px-4 py-2 text-start text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"
                     >
                       <LogOut size={15} /> {t('nav_logout')}
                     </button>
@@ -254,13 +254,13 @@ export default function Navbar() {
             <hr className="border-slate-100 dark:border-slate-800" />
             <button
               onClick={handleToggleTheme}
-              className="flex items-center gap-2.5 text-left text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300"
+              className="flex items-center gap-2.5 text-start text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300"
             >
               {isDark ? <Sun size={15} /> : <Moon size={15} />}
               {isDark ? 'Light Mode' : 'Dark Mode'}
             </button>
             {user ? (
-              <button onClick={handleLogout} className="text-left text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300">
+              <button onClick={handleLogout} className="text-start text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300">
                 {t('nav_logout')}
               </button>
             ) : (

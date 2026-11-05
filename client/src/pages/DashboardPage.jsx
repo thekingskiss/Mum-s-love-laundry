@@ -33,7 +33,7 @@ import { PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, suggestPaymentType } from '
 import { timeAgo, useNotifications } from '../lib/useNotifications';
 
 const TERMINAL_STATUSES = ['completed', 'cancelled'];
-const SUB_PAGES = ['orders', 'payments', 'notifications'];
+const SUB_PAGES = ['orders', 'payments', 'pricing', 'notifications'];
 const OVERVIEW_ORDER_LIMIT = 3;
 const CARD_CLASS = 'rounded-2xl border border-slate-100 bg-white shadow-soft dark:border-slate-700 dark:bg-slate-800';
 
@@ -83,6 +83,7 @@ export default function DashboardPage() {
       {page === 'overview' && <OverviewPage {...orderProps} unreadCount={notifications.unreadCount} />}
       {page === 'orders' && <MyOrdersPage {...orderProps} onChanged={loadOrders} />}
       {page === 'payments' && <PaymentsPage {...orderProps} />}
+      {page === 'pricing' && <PriceListPage />}
       {page === 'notifications' && <NotificationsPage {...notifications} />}
 
       {payingOrder && <PayNowModal order={payingOrder} onClose={() => setPayingOrder(null)} />}
@@ -588,6 +589,101 @@ function PaymentsPage({ orders, loading, error, onPay }) {
   );
 }
 
+// Read only, and from the public list, so customers only ever get active items.
+function PriceListPage() {
+  const { formatPrice } = useCurrency();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    api
+      .get('/items')
+      .then(({ data }) => setItems(data.items))
+      .catch(() => setFailed(true))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const query = search.trim().toLowerCase();
+  const grouped = items
+    .filter((item) => !query || `${item.item_name} ${item.category}`.toLowerCase().includes(query))
+    .reduce((groups, item) => {
+      groups[item.category] = groups[item.category] || [];
+      groups[item.category].push(item);
+      return groups;
+    }, {});
+  const categories = Object.entries(grouped);
+
+  return (
+    <>
+      <PageHeading
+        title="Pricing"
+        description="What each item costs. A price range is confirmed when you drop off."
+      >
+        <BookButton />
+      </PageHeading>
+
+      {failed && <ErrorMessage>Unable to load the price list right now.</ErrorMessage>}
+      {loading && <Skeleton className="mt-6 h-32 rounded-2xl" />}
+
+      {!loading && !failed && (
+        <>
+          <input
+            aria-label="Search the price list"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search items or categories..."
+            className="mt-6 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-white sm:max-w-xs"
+          />
+
+          {categories.length === 0 && (
+            <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">No items match.</p>
+          )}
+
+          <div className="mt-6 space-y-8">
+            {categories.map(([category, categoryItems]) => (
+              <section key={category} aria-label={category}>
+                <h2 className="text-xs font-bold uppercase tracking-widest text-brand-600 dark:text-brand-300">
+                  {category} ({categoryItems.length})
+                </h2>
+                <div className={`mt-3 overflow-hidden ${CARD_CLASS}`}>
+                  <table className="w-full text-left text-sm sm:table-fixed">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                      <tr>
+                        <th scope="col" className="px-4 py-2.5 font-medium">Item</th>
+                        <th scope="col" className="px-4 py-2.5 font-medium">Price</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                      {categoryItems.map((item) => (
+                        <tr key={item.id}>
+                          <td className="px-4 py-2.5 font-medium text-ink-900 dark:text-white">{item.item_name}</td>
+                          <td className="px-4 py-2.5 text-slate-700 dark:text-slate-200 sm:whitespace-nowrap">
+                            {item.unit_price != null ? (
+                              <span className="whitespace-nowrap">{formatPrice(item.unit_price)}</span>
+                            ) : (
+                              <>
+                                <span className="whitespace-nowrap">{formatPrice(item.price_min)}</span>
+                                {' – '}
+                                <span className="whitespace-nowrap">{formatPrice(item.price_max)}</span>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 function NotificationsPage({ notifications, unreadCount, loading, failed, markRead, markAllRead }) {
   return (
     <>
@@ -687,8 +783,8 @@ function PayNowModal({ order, onClose }) {
 
         <form onSubmit={handlePay} className="mt-5 space-y-3">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-widest text-slate-400">Amount (GHS)</label>
-            <input
+            <label htmlFor="dashboard-amount-ghs" className="block text-xs font-semibold uppercase tracking-widest text-slate-400">Amount (GHS)</label>
+            <input id="dashboard-amount-ghs"
               type="number"
               step="0.01"
               min="0.01"

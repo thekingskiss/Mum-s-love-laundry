@@ -10,3 +10,8 @@ Microsoft/
 
 # Local reference images and screenshots (not used by the app; the site's images live in client/src/assets)
 images/
+
+# End-to-end test output
+e2e/test-results/
+e2e/playwright-report/
+client/dist-e2e/

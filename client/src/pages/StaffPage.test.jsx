@@ -11,7 +11,7 @@ vi.mock('../api/axios', () => ({
 const session = vi.hoisted(() => ({ role: 'laundry_staff', currentBranchId: '' }));
 
 vi.mock('../context/AuthContext.jsx', () => ({
-  useAuth: () => ({ user: { id: 1, role: session.role, full_name: 'Ama Staff' } }),
+  useAuth: () => ({ user: { id: 1, role: session.role, full_name: 'Ama Staff', branch_id: session.role === 'super_admin' ? null : 1 } }),
 }));
 vi.mock('../context/BranchContext.jsx', () => ({
   useBranch: () => ({
@@ -104,15 +104,44 @@ describe('StaffPage navigation', () => {
     expect(screen.queryByRole('heading', { name: 'Overview' })).not.toBeInTheDocument();
   });
 
-  it('keeps an administrator out of staff accounts, branches and the audit log', async () => {
+  it('keeps an administrator out of branches and the audit log', async () => {
     session.role = 'administrator';
-    for (const tab of ['staff', 'audit', 'branches']) {
+    for (const tab of ['audit', 'branches']) {
       const { unmount } = renderAdminAt(`/admin?tab=${tab}`);
       expect(await screen.findByRole('heading', { name: 'Business overview' })).toBeInTheDocument();
       unmount();
     }
-    expect(api.get).not.toHaveBeenCalledWith('/admin/staff');
     expect(api.get).not.toHaveBeenCalledWith('/admin/audit-log');
+  });
+
+  describe('Staff accounts', () => {
+    const TEAM = [
+      { id: 10, full_name: 'Kofi Mensah', email: 'kofi@example.com', role: 'laundry_staff', branch_id: 1, branch_name: 'Koforidua', is_active: true },
+    ];
+
+    beforeEach(() => {
+      api.get.mockImplementation((url) => {
+        if (url === '/admin/staff') return Promise.resolve({ data: { staff: TEAM } });
+        return Promise.resolve({ data: { orders: [] } });
+      });
+    });
+
+    it('lets an administrator see their team and manage it, but not add accounts', async () => {
+      session.role = 'administrator';
+      renderAdminAt('/admin?tab=staff');
+      expect(await screen.findByText('Kofi Mensah')).toBeInTheDocument();
+      expect(api.get).toHaveBeenCalledWith('/admin/staff');
+      expect(screen.getByRole('button', { name: /deactivate/i })).toBeInTheDocument();
+      // Creating accounts stays with the super admin (the server enforces it too).
+      expect(screen.queryByRole('button', { name: 'Create Account' })).not.toBeInTheDocument();
+    });
+
+    it('gives a super admin the form to add accounts as well', async () => {
+      session.role = 'super_admin';
+      renderAdminAt('/admin?tab=staff');
+      expect(await screen.findByText('Kofi Mensah')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Create Account' })).toBeInTheDocument();
+    });
   });
 
   describe('Pricing', () => {
@@ -212,11 +241,57 @@ describe('StaffPage navigation', () => {
       expect(screen.getByText('No items match.')).toBeInTheDocument();
     });
 
-    it('keeps laundry staff out', async () => {
+    function expectNoEditControls() {
+      for (const name of [/^edit /i, /^deactivate /i, /^activate /i, 'Add item', 'Save']) {
+        expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+      }
+      expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Item name')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Price (GHS)')).not.toBeInTheDocument();
+    }
+
+    it('shows laundry staff the full list, including inactive items and ranges', async () => {
       session.role = 'laundry_staff';
       renderAt('/staff?tab=pricing');
-      expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument();
-      expect(api.get).not.toHaveBeenCalledWith('/admin/items');
+      expect(await screen.findByText('Duvet')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Pricing' })).toBeInTheDocument();
+      expect(screen.getByText('GHS 40.00')).toBeInTheDocument();
+      expect(screen.getByText('GHS 10.00–20.00')).toBeInTheDocument();
+      expect(within(screen.getByText('Old Gown').closest('tr')).getByText('Inactive')).toBeInTheDocument();
+      expect(screen.getByText(/3 items, 2 active/)).toBeInTheDocument();
+    });
+
+    it('gives laundry staff no way to change a price', async () => {
+      session.role = 'laundry_staff';
+      renderAt('/staff?tab=pricing');
+      await screen.findByText('Duvet');
+      expect(screen.getByText(/view only/i)).toBeInTheDocument();
+      expectNoEditControls();
+    });
+
+    it('still lets laundry staff search and filter', async () => {
+      session.role = 'laundry_staff';
+      renderAt('/staff?tab=pricing');
+      await screen.findByText('Duvet');
+      fireEvent.change(screen.getByLabelText('Filter by status'), { target: { value: 'inactive' } });
+      expect(screen.getByText('Old Gown')).toBeInTheDocument();
+      expect(screen.queryByText('Duvet')).not.toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Filter by status'), { target: { value: 'all' } });
+      fireEvent.change(screen.getByLabelText('Search the price list'), { target: { value: 'mat' } });
+      expect(screen.getByText('Bathroom Mat')).toBeInTheDocument();
+      expect(screen.queryByText('Duvet')).not.toBeInTheDocument();
+    });
+
+    it('is view only when an admin previews the staff view', async () => {
+      renderAt('/staff?tab=pricing');
+      await screen.findByText('Duvet');
+      expectNoEditControls();
+    });
+
+    it('does not tell administrators the list is view only', async () => {
+      renderAdminAt('/admin?tab=pricing');
+      await screen.findByRole('button', { name: 'Edit Duvet' });
+      expect(screen.queryByText(/view only/i)).not.toBeInTheDocument();
     });
   });
 

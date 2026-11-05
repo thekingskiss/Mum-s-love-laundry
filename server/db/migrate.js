@@ -19,6 +19,7 @@ const MIGRATIONS = [
   { version: 21, filename: 'migrate_v21_shop_time_zone.sql' },
   { version: 22, filename: 'migrate_v22_more_themes.sql' },
   { version: 23, filename: 'migrate_v23_naira.sql' },
+  { version: 24, filename: 'migrate_v24_account_status.sql' },
 ];
 const LOCK_NAMESPACE = 187003;
 const LOCK_ID = 1;
