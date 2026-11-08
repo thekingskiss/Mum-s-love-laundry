@@ -28,6 +28,7 @@ import ProgressTracker from '../components/ProgressTracker.jsx';
 import StatusPill from '../components/StatusPill.jsx';
 import PaymentStatusPill from '../components/PaymentStatusPill.jsx';
 import Skeleton from '../components/Skeleton.jsx';
+import MessageAttachments from '../components/MessageAttachments.jsx';
 import { CUSTOMER_CANCELLABLE_STATUSES } from '../lib/orderLifecycle';
 import { PAYMENT_METHOD_LABELS, PAYMENT_TYPE_LABELS, suggestPaymentType } from '../lib/payments';
 import { timeAgo, useNotifications } from '../lib/useNotifications';
@@ -78,7 +79,7 @@ export default function DashboardPage() {
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="mx-auto max-w-5xl px-6 pb-16 pt-10"
+      className="mx-auto max-w-5xl px-4 pb-8 pt-4 sm:px-6 sm:pb-16 sm:pt-10"
     >
       {page === 'overview' && <OverviewPage {...orderProps} unreadCount={notifications.unreadCount} />}
       {page === 'orders' && <MyOrdersPage {...orderProps} onChanged={loadOrders} />}
@@ -136,13 +137,13 @@ function SummaryCard({ to, icon: Icon, label, value, detail }) {
   return (
     <Link
       to={to}
-      className={`${CARD_CLASS} p-5 transition hover:border-brand-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300`}
+      className={`${CARD_CLASS} p-4 transition hover:border-brand-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 sm:p-5 [&:last-child:nth-child(odd)]:col-span-2 sm:[&:last-child:nth-child(odd)]:col-span-1`}
     >
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
         <Icon size={18} className="text-slate-400" />
       </div>
-      <p className="mt-3 font-display text-3xl font-semibold text-ink-900 dark:text-white">{value}</p>
+      <p className="mt-2 font-display text-2xl font-semibold text-ink-900 dark:text-white sm:mt-3 sm:text-3xl">{value}</p>
       <p className="mt-1 text-xs text-slate-400">{detail}</p>
     </Link>
   );
@@ -158,7 +159,7 @@ function OverviewPage({ orders, loading, error, unreadCount }) {
 
   return (
     <>
-      <div className={`flex flex-col justify-between gap-6 p-8 sm:flex-row sm:items-center ${CARD_CLASS}`}>
+      <div className={`flex flex-col justify-between gap-5 p-5 sm:flex-row sm:items-center sm:gap-6 sm:p-8 ${CARD_CLASS}`}>
         <div>
           <h1 className="font-display text-2xl font-semibold text-ink-900 dark:text-white">Welcome back, {user?.full_name?.split(' ')[0]}</h1>
           <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-500 dark:text-slate-400">
@@ -176,7 +177,7 @@ function OverviewPage({ orders, loading, error, unreadCount }) {
       {error && <ErrorMessage>{error}</ErrorMessage>}
 
       {loading && (
-        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:grid-cols-3 sm:gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-32 rounded-2xl" />
           ))}
@@ -185,7 +186,7 @@ function OverviewPage({ orders, loading, error, unreadCount }) {
 
       {!loading && !error && (
         <>
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-6 sm:grid-cols-3 sm:gap-4">
             <SummaryCard
               to="/dashboard?tab=orders"
               icon={ClipboardList}
@@ -451,7 +452,7 @@ function MyOrdersPage({ orders, loading, error, onPay, onChanged }) {
           <h2 className="text-lg font-semibold text-ink-900 dark:text-white">Order History</h2>
           <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-soft dark:border-slate-700 dark:bg-slate-800">
             <div className="relative overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="table-cards w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                 <tr>
                   <th className="px-6 py-3 font-medium">Items</th>
@@ -553,7 +554,7 @@ function PaymentsPage({ orders, loading, error, onPay }) {
       {payments.length > 0 && (
         <div className={`mt-4 overflow-hidden ${CARD_CLASS}`}>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="table-cards w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                 <tr>
                   <th className="px-6 py-3 font-medium">Date</th>
@@ -711,22 +712,24 @@ function NotificationsPage({ notifications, unreadCount, loading, failed, markRe
       {notifications.length > 0 && (
         <div className={`mt-6 overflow-hidden ${CARD_CLASS}`}>
           {notifications.map((n) => (
-            <button
+            <div
               key={n.id}
-              onClick={() => !n.read_at && markRead(n.id)}
-              className={`block w-full border-b border-slate-100 px-5 py-4 text-left transition last:border-0 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700/50 ${
+              className={`border-b border-slate-100 px-5 py-4 transition last:border-0 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700/50 ${
                 n.read_at ? '' : 'bg-brand-50/50 dark:bg-brand-900/10'
               }`}
             >
               <div className="flex items-start gap-3">
                 <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read_at ? 'bg-transparent' : 'bg-brand-500'}`} />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-ink-900 dark:text-white">{n.title}</p>
-                  <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{n.body}</p>
+                <div className="min-w-0 flex-1">
+                  <button onClick={() => !n.read_at && markRead(n.id)} className="block w-full text-left">
+                    <p className="text-sm font-semibold text-ink-900 dark:text-white">{n.title}</p>
+                    {n.body && <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{n.body}</p>}
+                  </button>
+                  <MessageAttachments attachments={n.attachments} onOpen={() => !n.read_at && markRead(n.id)} />
                   <p className="mt-1 text-xs text-slate-400">{timeAgo(n.created_at)}</p>
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -763,11 +766,11 @@ function PayNowModal({ order, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center sm:px-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-800"
+        initial={{ opacity: 0, y: 32 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-h-[92dvh] w-full max-w-sm overflow-y-auto overscroll-contain rounded-t-3xl bg-white p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-xl dark:bg-slate-800 sm:rounded-2xl sm:pb-6"
       >
         <div className="flex items-start justify-between">
           <div>

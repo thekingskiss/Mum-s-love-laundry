@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Bell, CheckCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { timeAgo, useNotifications } from '../lib/useNotifications';
+import MessageAttachments from './MessageAttachments.jsx';
 
 // Surfaces the in-app notifications the backend already writes on every
 // order status change, payment, and pickup-date assignment — previously
@@ -29,7 +30,7 @@ export default function NotificationBell() {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="Notifications"
-        className="relative flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-brand-300 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
+        className="relative flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-brand-300 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300 md:h-9 md:w-9"
       >
         <Bell size={16} />
         {unreadCount > 0 && (
@@ -46,7 +47,7 @@ export default function NotificationBell() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -6 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="absolute right-0 top-full z-50 mt-2 w-80 origin-top-right overflow-hidden rounded-lg border border-slate-100 bg-white shadow-soft dark:border-slate-700 dark:bg-slate-800"
+            className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+4.25rem)] z-50 max-h-[calc(100dvh-6rem)] origin-top overflow-hidden md:absolute md:inset-x-auto md:right-0 md:top-full md:mt-2 md:w-80 md:max-h-none md:origin-top-right rounded-lg border border-slate-100 bg-white shadow-soft dark:border-slate-700 dark:bg-slate-800"
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-700">
               <p className="text-sm font-semibold text-ink-900 dark:text-white">Notifications</p>
@@ -60,28 +61,34 @@ export default function NotificationBell() {
               )}
             </div>
 
-            <div className="max-h-96 overflow-y-auto">
+            <div className="max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain md:max-h-96">
               {loading && <p className="px-4 py-6 text-center text-xs text-slate-400">Loading...</p>}
               {!loading && notifications.length === 0 && (
                 <p className="px-4 py-6 text-center text-xs text-slate-400">No notifications yet.</p>
               )}
               {notifications.map((n) => (
-                <button
+                <div
                   key={n.id}
-                  onClick={() => !n.read_at && markRead(n.id)}
-                  className={`block w-full border-b border-slate-50 px-4 py-3 text-left transition last:border-0 hover:bg-slate-50 dark:border-slate-700/50 dark:hover:bg-slate-700/50 ${
+                  className={`border-b border-slate-50 transition last:border-0 hover:bg-slate-50 dark:border-slate-700/50 dark:hover:bg-slate-700/50 ${
                     n.read_at ? '' : 'bg-brand-50/50 dark:bg-brand-900/10'
                   }`}
                 >
-                  <div className="flex items-start gap-2">
-                    {!n.read_at && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />}
-                    <div className={n.read_at ? 'pl-3.5' : ''}>
-                      <p className="text-sm font-semibold text-ink-900 dark:text-white">{n.title}</p>
-                      <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{n.body}</p>
-                      <p className="mt-1 text-[11px] text-slate-400">{timeAgo(n.created_at)}</p>
+                  <button onClick={() => !n.read_at && markRead(n.id)} className="block w-full px-4 pt-3 text-left">
+                    <div className="flex items-start gap-2">
+                      {!n.read_at && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />}
+                      <div className={n.read_at ? 'pl-3.5' : ''}>
+                        <p className="text-sm font-semibold text-ink-900 dark:text-white">{n.title}</p>
+                        {n.body && <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{n.body}</p>}
+                      </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  {n.attachments?.length > 0 && (
+                    <div className="px-4 pl-[1.625rem]">
+                      <MessageAttachments attachments={n.attachments} onOpen={() => !n.read_at && markRead(n.id)} />
+                    </div>
+                  )}
+                  <p className="px-4 pb-3 pl-[1.625rem] pt-1 text-[11px] text-slate-400">{timeAgo(n.created_at)}</p>
+                </div>
               ))}
             </div>
           </motion.div>

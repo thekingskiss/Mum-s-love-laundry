@@ -43,7 +43,7 @@ function signature(fields, apiSecret) {
   return crypto.createHash('sha1').update(canonical + apiSecret).digest('hex');
 }
 
-async function cloudinaryRequest(action, config, fields) {
+async function cloudinaryRequest(action, config, fields, resourceType = 'image') {
   if (typeof fetch !== 'function') throw new Error('Cloudinary avatar uploads require Node.js 18 or later.');
   const timestamp = Math.floor(Date.now() / 1000);
   const signedFields = { ...fields, timestamp };
@@ -51,7 +51,7 @@ async function cloudinaryRequest(action, config, fields) {
   const body = new URLSearchParams(Object.fromEntries(
     Object.entries(bodyFields).map(([key, value]) => [key, String(value)])
   ));
-  const endpoint = 'https://api.cloudinary.com/v1_1/' + encodeURIComponent(config.cloudName) + '/image/' + action;
+  const endpoint = 'https://api.cloudinary.com/v1_1/' + encodeURIComponent(config.cloudName) + '/' + resourceType + '/' + action;
   const response = await fetch(endpoint, { method: 'POST', body, signal: AbortSignal.timeout(30000) });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.error) {
@@ -116,4 +116,4 @@ async function deleteAvatar(url) {
   if (publicId) await cloudinaryRequest('destroy', config, { public_id: publicId });
 }
 
-module.exports = { detectImageType, storeAvatar, deleteAvatar };
+module.exports = { detectImageType, storeAvatar, deleteAvatar, cloudinaryConfig, cloudinaryRequest };

@@ -2,7 +2,9 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const pool = require('../config/db');
 const { releaseCapacity } = require('./capacityController');
-const { notifyUser } = require('../services/notify');
+const { notifyUser, sendEmail, emailEnabled } = require('../services/notify');
+const { prepareAttachments } = require('../services/messageAttachments');
+const { recordAudit } = require('../services/auditLog');
 const { calculateLateFee, FREE_PICKUP_DAYS, LATE_FEE_PER_DAY } = require('../utils/lateFee');
 const { runPickupReminders } = require('../services/pickupReminders');
 const { runBalanceDueReminders } = require('../services/balanceDueReminders');
@@ -183,21 +185,83 @@ async function setStorageLocation(req, res, next) {
   }
 }
 
-// Admin-authored message, either to one customer (customer_id) or broadcast
-// to every customer account. Always lands as an in-app notification; email/sms
-// are opt-in per send so a broadcast doesn't silently spam every channel.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DELIVERY_MODES = ['in_app', 'in_app_email', 'email'];
+const asBool = (value) => value === true || value === 'true' || value === '1' || value === 'on';
+
+// Admin-authored message, either to one customer (customer_id), to any email
+// address (recipient_email), or broadcast to every customer account. It can
+// carry up to a few files (images, audio, video, documents).
+//
+// `delivery` picks how it travels:
+//   in_app        — appears in the customer's notifications only
+//   in_app_email  — "indirect" email: appears in the app and a copy is emailed
+//   email         — "direct" email: goes straight to the inbox, nothing is
+//                   posted in the app (the only mode for a recipient_email)
+// SMS is opt-in per send so a broadcast doesn't silently spam every channel.
+// Accepts JSON (text only) or multipart/form-data (with `attachments` files).
 async function sendMessage(req, res, next) {
   try {
-    const { title, body, customer_id, send_email, send_sms } = req.body;
+    const { title, body, customer_id, recipient_email } = req.body;
+    const files = req.files || [];
 
-    if (!title || !title.trim() || !body || !body.trim()) {
-      return res.status(400).json({ error: 'title and body are required.' });
+    if (typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ error: 'title is required.' });
     }
     if (title.trim().length > 255) {
       return res.status(400).json({ error: 'title must be 255 characters or fewer.' });
     }
-    if (body.trim().length > 2000) {
+    if (body !== undefined && typeof body !== 'string') {
+      return res.status(400).json({ error: 'body must be text.' });
+    }
+    const bodyText = (body || '').trim();
+    if (!bodyText && files.length === 0) {
+      return res.status(400).json({ error: 'Write a message or attach a file.' });
+    }
+    if (bodyText.length > 2000) {
       return res.status(400).json({ error: 'body must be 2000 characters or fewer.' });
+    }
+
+    const directAddress = typeof recipient_email === 'string' ? recipient_email.trim().toLowerCase() : '';
+    if (recipient_email && !EMAIL_PATTERN.test(directAddress)) {
+      return res.status(400).json({ error: 'Enter a valid email address.' });
+    }
+
+    let delivery = req.body.delivery || (asBool(req.body.send_email) ? 'in_app_email' : 'in_app');
+    if (directAddress) delivery = 'email';
+    if (!DELIVERY_MODES.includes(delivery)) {
+      return res.status(400).json({ error: 'delivery must be in_app, in_app_email, or email.' });
+    }
+    const wantsEmail = delivery !== 'in_app';
+    const wantsSms = asBool(req.body.send_sms) && delivery !== 'email';
+
+    // Don't pretend a direct email went out when the server can't send mail.
+    if (delivery === 'email' && !emailEnabled) {
+      return res.status(503).json({ error: 'Email is not set up on the server yet, so a direct email cannot be sent.' });
+    }
+
+    const summaryText = bodyText || `Shared ${files.length} attachment${files.length === 1 ? '' : 's'} with you.`;
+
+    // A message to an address that isn't a customer account: email only.
+    if (directAddress) {
+      const { emailAttachments } = await prepareAttachments(files, { store: false });
+      try {
+        await sendEmail(directAddress, title.trim(), summaryText, emailAttachments);
+      } catch (err) {
+        console.error('[message] direct email failed:', err.message);
+        return res.status(502).json({ error: 'The email could not be delivered. Check the address and the mail settings, then try again.' });
+      }
+      await recordAudit(req.user, {
+        action: 'message.sent',
+        entityType: 'message',
+        summary: `Emailed "${title.trim()}" directly to ${directAddress}${files.length ? ` with ${files.length} attachment(s)` : ''}`,
+      });
+      return res.json({
+        recipient_count: 1,
+        email_requested: true,
+        email_sent_count: 1,
+        attachment_count: files.length,
+      });
     }
 
     let recipients;
@@ -220,21 +284,40 @@ async function sendMessage(req, res, next) {
     }
 
     const trimmedTitle = title.trim();
-    const trimmedBody = body.trim();
+    // Checks every file and stores them once; all recipients share the same copies.
+    const { attachments, emailAttachments } = await prepareAttachments(files, { store: delivery !== 'email' });
 
-    await Promise.all(
+    const outcomes = await Promise.all(
       recipients.map((r) =>
         notifyUser(r.id, {
           type: 'admin_message',
           title: trimmedTitle,
-          body: trimmedBody,
-          email: send_email ? r.email : undefined,
-          phone: send_sms ? r.phone_number : undefined,
-        }).catch((err) => console.error('[notify] failed:', err.message))
+          body: summaryText,
+          email: wantsEmail ? r.email : undefined,
+          phone: wantsSms ? r.phone_number : undefined,
+          attachments,
+          emailAttachments,
+          skipInApp: delivery === 'email',
+        }).catch((err) => {
+          console.error('[notify] failed:', err.message);
+          return { emailSent: false, smsSent: false };
+        })
       )
     );
 
-    res.json({ recipient_count: recipients.length });
+    const emailSentCount = outcomes.filter((o) => o.emailSent).length;
+    await recordAudit(req.user, {
+      action: 'message.sent',
+      entityType: 'message',
+      summary: `Sent "${trimmedTitle}" to ${customer_id ? `customer #${customer_id}` : `${recipients.length} customers`} (${delivery})${files.length ? ` with ${files.length} attachment(s)` : ''}`,
+    });
+
+    res.json({
+      recipient_count: recipients.length,
+      email_requested: wantsEmail,
+      email_sent_count: emailSentCount,
+      attachment_count: files.length,
+    });
   } catch (err) {
     next(err);
   }
