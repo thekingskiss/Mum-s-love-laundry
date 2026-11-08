@@ -25,6 +25,19 @@ export function serverEnv() {
     PORT: String(API_PORT),
     DATABASE_URL: '',
     DB_NAME: E2E_DB,
+    // Blank, not absent: the server loads server/.env without overriding values
+    // that are already set, so this stops a real mail, SMS or Cloudinary account
+    // in that file from being used. Tests can then never email or text anyone,
+    // and uploads stay on local disk.
+    SMTP_HOST: '',
+    SMTP_USER: '',
+    SMTP_PASS: '',
+    TWILIO_ACCOUNT_SID: '',
+    TWILIO_AUTH_TOKEN: '',
+    TWILIO_PHONE_NUMBER: '',
+    CLOUDINARY_CLOUD_NAME: '',
+    CLOUDINARY_API_KEY: '',
+    CLOUDINARY_API_SECRET: '',
     JWT_SECRET: 'e2e-only-secret-not-used-anywhere-else-0123456789',
     CLIENT_ORIGIN: WEB_URL,
     LOG_LEVEL: 'warn',
