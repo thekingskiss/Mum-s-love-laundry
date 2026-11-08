@@ -1,0 +1,4 @@
+# Database migrations are fingerprinted byte-for-byte by server/db/migrate.js.
+# Keep Unix line endings on every machine so a Windows checkout (autocrlf) can
+# never change a migration's checksum and make the migrator refuse to run.
+*.sql text eol=lf
