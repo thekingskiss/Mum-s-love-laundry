@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, Minus, Plus, Search } from 'lucide-react';
 import api from '../api/axios';
 import Skeleton from '../components/Skeleton.jsx';
+import { useCurrency } from '../context/CurrencyContext.jsx';
 import { SHOP_ADDRESS, SHOP_HOURS } from '../lib/shopInfo.js';
 
 const STEPS = ['Items', 'Drop-off Date', 'Confirm'];
@@ -16,13 +17,9 @@ function itemPrice(item) {
   return item.unit_price != null ? Number(item.unit_price) : Number(item.price_min);
 }
 
-function priceLabel(item) {
-  if (item.unit_price != null) return `GHS ${Number(item.unit_price).toFixed(2)}`;
-  return `GHS ${Number(item.price_min).toFixed(2)}–${Number(item.price_max).toFixed(2)}`;
-}
-
 export default function BookingPage() {
   const navigate = useNavigate();
+  const { formatPrice, formatItemPrice } = useCurrency();
 
   const [step, setStep] = useState(0);
   const [items, setItems] = useState([]);
@@ -145,7 +142,7 @@ export default function BookingPage() {
           Bring in {cartLines.reduce((n, l) => n + l.quantity, 0)} item{cartLines.length === 1 ? '' : 's'} on{' '}
           <strong>{order.drop_off_date?.slice(0, 10)}</strong> and we'll take care of the rest.
         </p>
-        <p className="mt-1 text-lg font-semibold text-brand-600">GHS {Number(order.total_price).toFixed(2)}</p>
+        <p className="mt-1 text-lg font-semibold text-brand-600">{formatPrice(order.total_price)}</p>
 
         <div className="mt-6 flex flex-col gap-2 rounded-lg bg-slate-50 p-4 text-sm text-slate-600 sm:flex-row sm:gap-6">
           <span className="flex items-center gap-2">
@@ -169,7 +166,7 @@ export default function BookingPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 pb-16 pt-10">
+    <div className="mx-auto max-w-5xl px-4 pb-8 pt-4 sm:px-6 sm:pb-16 sm:pt-10">
       <h1 className="font-display text-3xl font-semibold text-ink-900">Book a Drop-off</h1>
       <p className="mt-2 text-slate-500">Choose your items and a date, then bring your laundry in to our shop.</p>
 
@@ -194,7 +191,7 @@ export default function BookingPage() {
         ))}
       </div>
 
-      <div className="mt-10 overflow-hidden rounded-2xl border border-slate-100 bg-white p-8 shadow-soft">
+      <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100 bg-white p-5 shadow-soft sm:mt-10 sm:p-8">
         <AnimatePresence mode="wait">
         {step === 0 && (
           <motion.div
@@ -241,7 +238,7 @@ export default function BookingPage() {
                               <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
                                 <div>
                                   <p className="text-sm font-medium text-ink-900">{item.item_name}</p>
-                                  <p className="text-xs text-slate-400">{priceLabel(item)}</p>
+                                  <p className="text-xs text-slate-400">{formatItemPrice(item)}</p>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <motion.button
@@ -249,7 +246,7 @@ export default function BookingPage() {
                                     whileTap={{ scale: 0.85 }}
                                     onClick={() => setQuantity(item.id, qty - 1)}
                                     disabled={qty === 0}
-                                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors hover:border-brand-300 hover:text-brand-600 disabled:opacity-30"
+                                    className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors hover:border-brand-300 hover:text-brand-600 active:scale-95 disabled:opacity-30 sm:h-7 sm:w-7"
                                   >
                                     <Minus size={13} />
                                   </motion.button>
@@ -258,7 +255,7 @@ export default function BookingPage() {
                                     type="button"
                                     whileTap={{ scale: 0.85 }}
                                     onClick={() => setQuantity(item.id, qty + 1)}
-                                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors hover:border-brand-300 hover:text-brand-600"
+                                    className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors hover:border-brand-300 hover:text-brand-600 active:scale-95 sm:h-7 sm:w-7"
                                   >
                                     <Plus size={13} />
                                   </motion.button>
@@ -286,12 +283,12 @@ export default function BookingPage() {
                   {cartLines.map((l) => (
                     <div key={l.item.id} className="flex justify-between text-xs text-slate-600">
                       <span>{l.item.item_name} x{l.quantity}</span>
-                      <span className="font-medium text-ink-900">GHS {l.lineTotal.toFixed(2)}</span>
+                      <span className="font-medium text-ink-900">{formatPrice(l.lineTotal)}</span>
                     </div>
                   ))}
                   <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold text-brand-600">
                     <span>Total</span>
-                    <span>GHS {cartTotal.toFixed(2)}</span>
+                    <span>{formatPrice(cartTotal)}</span>
                   </div>
                   {hasEstimatedItems && (
                     <p className="pt-1 text-[11px] text-slate-400">
@@ -379,7 +376,7 @@ export default function BookingPage() {
               {cartLines.map((l) => (
                 <div key={l.item.id} className="flex justify-between text-sm text-slate-600">
                   <span>{l.item.item_name} x{l.quantity}</span>
-                  <span className="font-medium text-ink-900">GHS {l.lineTotal.toFixed(2)}</span>
+                  <span className="font-medium text-ink-900">{formatPrice(l.lineTotal)}</span>
                 </div>
               ))}
             </div>
@@ -391,7 +388,7 @@ export default function BookingPage() {
               </div>
               <div className="flex justify-between py-3">
                 <dt className="text-slate-500">Total Price</dt>
-                <dd className="font-bold text-brand-600">GHS {cartTotal.toFixed(2)}</dd>
+                <dd className="font-bold text-brand-600">{formatPrice(cartTotal)}</dd>
               </div>
             </dl>
             {hasEstimatedItems && (

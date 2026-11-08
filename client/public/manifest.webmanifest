@@ -1,0 +1,44 @@
+{
+  "id": "/",
+  "name": "Mum's Love Laundry",
+  "short_name": "Mum's Love",
+  "description": "Book laundry drop-offs, track your orders and pay, or run the shop floor, from your phone.",
+  "lang": "en",
+  "dir": "auto",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#eb1c1c",
+  "categories": ["business", "lifestyle", "utilities"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Book a drop-off",
+      "short_name": "Book",
+      "description": "Start a new laundry order",
+      "url": "/book?source=shortcut",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "My orders",
+      "short_name": "Orders",
+      "description": "Track your laundry",
+      "url": "/dashboard?tab=orders&source=shortcut",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Price list",
+      "short_name": "Prices",
+      "description": "See what each item costs",
+      "url": "/pricing?source=shortcut",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

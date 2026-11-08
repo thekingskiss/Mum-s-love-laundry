@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
 import { SESSION_ENDED_EVENT } from '../lib/sessionEvents.js';
 
@@ -17,18 +17,47 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener(SESSION_ENDED_EVENT, onSessionEnded);
   }, []);
 
-  useEffect(() => {
+  // True when a saved login couldn't be checked because the server was
+  // unreachable (offline, or down), as opposed to being rejected. The token is
+  // kept in that case, so opening the installed app on a bad connection doesn't
+  // sign anyone out.
+  const [connectionError, setConnectionError] = useState(false);
+
+  const restoreSession = useCallback(() => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
       setLoading(false);
       return;
     }
+    setLoading(true);
     api
       .get('/auth/me')
-      .then(({ data }) => setUser(data.user))
-      .catch(() => localStorage.removeItem(TOKEN_KEY))
+      .then(({ data }) => {
+        setConnectionError(false);
+        setUser(data.user);
+      })
+      .catch((error) => {
+        const status = error.response?.status;
+        if (!status || status >= 500) {
+          setConnectionError(true);
+        } else {
+          setConnectionError(false);
+          localStorage.removeItem(TOKEN_KEY);
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    restoreSession();
+  }, [restoreSession]);
+
+  // Try again by itself as soon as the connection comes back.
+  useEffect(() => {
+    if (!connectionError) return undefined;
+    window.addEventListener('online', restoreSession);
+    return () => window.removeEventListener('online', restoreSession);
+  }, [connectionError, restoreSession]);
 
   async function register(payload) {
     const { data } = await api.post('/auth/register', payload);
@@ -46,6 +75,7 @@ export function AuthProvider({ children }) {
 
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
+    setConnectionError(false);
     setUser(null);
   }
 
@@ -66,8 +96,8 @@ export function AuthProvider({ children }) {
   }
 
   const value = useMemo(
-    () => ({ user, loading, register, login, logout, updateProfile, uploadAvatar }),
-    [user, loading]
+    () => ({ user, loading, connectionError, retrySession: restoreSession, register, login, logout, updateProfile, uploadAvatar }),
+    [user, loading, connectionError, restoreSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

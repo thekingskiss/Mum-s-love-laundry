@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute.jsx';
 
-const session = vi.hoisted(() => ({ user: null, loading: false }));
+const session = vi.hoisted(() => ({ user: null, loading: false, connectionError: false, retrySession: () => {} }));
 vi.mock('../context/AuthContext.jsx', () => ({ useAuth: () => session }));
 
 function renderGuard(roles) {
@@ -21,6 +21,26 @@ function renderGuard(roles) {
 }
 
 describe('ProtectedRoute', () => {
+  beforeEach(() => {
+    Object.assign(session, { user: null, loading: false, connectionError: false, retrySession: () => {} });
+  });
+
+  it('does not send someone to the login page just because the server was unreachable', () => {
+    session.connectionError = true;
+    renderGuard();
+    expect(screen.queryByText('login page')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent("Can't reach the server");
+  });
+
+  it('lets them retry from that screen', () => {
+    const retry = vi.fn();
+    session.connectionError = true;
+    session.retrySession = retry;
+    renderGuard();
+    screen.getByRole('button', { name: /try again/i }).click();
+    expect(retry).toHaveBeenCalled();
+  });
+
   it('waits while the saved login is being checked, without flashing the login page', () => {
     session.user = null;
     session.loading = true;

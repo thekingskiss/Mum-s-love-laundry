@@ -22,7 +22,13 @@ vi.mock('../context/BranchContext.jsx', () => ({
   }),
 }));
 vi.mock('../context/CurrencyContext.jsx', () => ({
-  useCurrency: () => ({ formatPrice: (value) => `GHS ${Number(value).toFixed(2)}` }),
+  useCurrency: () => ({
+    formatPrice: (value) => `GHS ${Number(value).toFixed(2)}`,
+    formatItemPrice: (item) =>
+      item.unit_price != null
+        ? `GHS ${Number(item.unit_price).toFixed(2)}`
+        : `GHS ${Number(item.price_min).toFixed(2)}–${Number(item.price_max).toFixed(2)}`,
+  }),
 }));
 vi.mock('../context/ToastContext.jsx', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),

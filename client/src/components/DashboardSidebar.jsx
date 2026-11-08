@@ -1,119 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeftRight,
-  BarChart3,
-  Bell,
-  Boxes,
-  Building2,
-  CalendarCheck,
-  CalendarDays,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ClipboardList,
-  FileText,
-  History,
-  Home,
-  LogOut,
-  Mail,
-  MapPin,
-  Menu,
-  Package,
-  Percent,
-  Receipt,
-  Settings,
-  UserRound,
-  Users,
-  Wallet,
-  X,
-} from 'lucide-react';
-import api from '../api/axios';
+import { ArrowLeftRight, ChevronDown, ChevronLeft, ChevronRight, LogOut, Settings, UserRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useBranch } from '../context/BranchContext.jsx';
+import { adminGroups, customerItems, dashboardItem, staffItems } from '../lib/dashboardNav.js';
 import { ADMIN_ROLES, STAFF_ROLES, workspacePath } from '../lib/roles';
-
-const BADGE_REFRESH_MS = 60_000;
-
-const customerItems = [
-  {
-    label: 'Dashboard',
-    to: '/dashboard',
-    icon: Home,
-  },
-  {
-    label: 'Book an Order',
-    to: '/book',
-    icon: Package,
-  },
-  {
-    label: 'Pricing',
-    to: '/dashboard?tab=pricing',
-    icon: Percent,
-  },
-  {
-    label: 'My Orders',
-    to: '/dashboard?tab=orders',
-    icon: ClipboardList,
-  },
-  {
-    label: 'Payments',
-    to: '/dashboard?tab=payments',
-    icon: Wallet,
-  },
-  {
-    label: 'Notifications',
-    to: '/dashboard?tab=notifications',
-    icon: Bell,
-  },
-];
-
-const dashboardItem = { label: 'Dashboard', tab: null, icon: Home };
-
-const staffItems = [
-  dashboardItem,
-  { label: 'Orders', tab: 'orders', icon: ClipboardList },
-  { label: 'Customers', tab: 'customers', icon: Users },
-  { label: 'Messages', tab: 'messages', icon: Mail },
-  { label: 'Invoices', tab: 'invoices', icon: FileText },
-  { label: 'Pricing', tab: 'pricing', icon: Percent },
-];
-
-// badge names a field of GET /admin/overview. Opening one group closes the
-// others, which keeps the whole list on screen without scrolling.
-const adminGroups = [
-  {
-    label: 'Operations',
-    items: [
-      { label: 'Orders', tab: 'orders', icon: ClipboardList },
-      { label: 'Customers', tab: 'customers', icon: Users },
-      { label: 'Messages', tab: 'messages', icon: Mail, badge: 'unread_messages' },
-      { label: 'Invoices', tab: 'invoices', icon: FileText },
-      { label: 'Scheduled Pickups', tab: 'pickups', icon: CalendarCheck, badge: 'overdue_pickups' },
-    ],
-  },
-  {
-    label: 'Management',
-    items: [
-      { label: 'Analytics', tab: 'analytics', icon: BarChart3 },
-      { label: 'Payments', tab: 'payments', icon: Wallet },
-      { label: 'Expenses', tab: 'expenses', icon: Receipt },
-      { label: 'Inventory', tab: 'inventory', icon: Boxes, badge: 'low_stock_count' },
-    ],
-  },
-  {
-    label: 'Administration',
-    items: [
-      { label: 'Branches', tab: 'branches', icon: Building2, superAdminOnly: true },
-      { label: 'Pricing', tab: 'pricing', icon: Percent },
-      { label: 'Staff accounts', tab: 'staff', icon: Users },
-      { label: 'Zones', tab: 'zones', icon: MapPin },
-      { label: 'Capacity', tab: 'capacity', icon: CalendarDays },
-      { label: 'Audit log', tab: 'audit', icon: History, superAdminOnly: true },
-      { label: 'Settings', to: '/settings', icon: Settings },
-    ],
-  },
-];
+import { useAdminFigures } from '../lib/useAdminFigures.js';
 
 function CountBadge({ count, compact }) {
   if (!count) return null;
@@ -167,33 +59,12 @@ function SidebarButton({ item, active, showLabels, badge, adminAccent, onClick }
   );
 }
 
-function AdminNav({ isSuperAdmin, showLabels, onNavigate }) {
+function AdminNav({ isSuperAdmin, showLabels }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentBranchId } = useBranch();
-  const [figures, setFigures] = useState(null);
-
-  // location.search is a dependency so a badge updates after acting on it.
-  useEffect(() => {
-    let cancelled = false;
-
-    function load() {
-      api
-        .get('/admin/overview', { params: { branch_id: currentBranchId || undefined } })
-        .then(({ data }) => {
-          if (!cancelled) setFigures(data);
-        })
-        .catch(() => {});
-    }
-
-    load();
-    const interval = setInterval(load, BADGE_REFRESH_MS);
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [currentBranchId, location.search]);
+  // location.search is the refresh key so a badge updates after acting on it.
+  const figures = useAdminFigures({ branchId: currentBranchId, refreshKey: location.search });
 
   const currentTab = new URLSearchParams(location.search).get('tab');
   const isActive = (item) => {
@@ -226,7 +97,6 @@ function AdminNav({ isSuperAdmin, showLabels, onNavigate }) {
         badge={badgeFor(item)}
         adminAccent
         onClick={() => {
-          onNavigate();
           if (item.to) navigate(item.to);
           else navigate(item.tab === null ? '/admin' : `/admin?tab=${encodeURIComponent(item.tab)}`);
         }}
@@ -277,7 +147,6 @@ export default function DashboardSidebar() {
   const location = useLocation();
 
   const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   const role = user?.role;
 
@@ -294,29 +163,19 @@ export default function DashboardSidebar() {
     user?.name?.trim()?.split(/\s+/)[0] ||
     'User';
 
-  /*
-   * Labels should always be visible on mobile.
-   * On desktop they disappear only when the sidebar is collapsed.
-   */
-  const showLabels = !collapsed || mobileOpen;
-
-  function closeMobileMenu() {
-    setMobileOpen(false);
-  }
+  // Phones get the tab bar instead (see MobileShell), so this is desktop-only.
+  const showLabels = !collapsed;
 
   function handleLogout() {
-    closeMobileMenu();
     logout();
     navigate('/login', { replace: true });
   }
 
   function handleLogoNavigation() {
-    closeMobileMenu();
     navigate(workspacePath(role));
   }
 
   function handleStaffNavigation(tab) {
-    closeMobileMenu();
 
     if (tab === null) {
       navigate('/staff');
@@ -352,48 +211,19 @@ export default function DashboardSidebar() {
     );
   }
 
-  const sidebarWidth =
-    collapsed && !mobileOpen ? 'md:w-20' : 'md:w-72';
+  const sidebarWidth = collapsed ? 'w-20' : 'w-72';
 
   // Admins have the longest menu, so their bottom actions share one row.
   const actionsInRow = adminView && showLabels;
 
   return (
     <>
-      {/* Mobile menu button */}
-      {!mobileOpen && (
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          className="fixed start-4 top-4 z-40 rounded-xl border border-slate-200 bg-white p-2.5 text-slate-700 shadow-lg transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 md:hidden"
-          aria-label="Open dashboard menu"
-          aria-expanded={false}
-          aria-controls="dashboard-sidebar"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-      )}
-
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <button
-          type="button"
-          aria-label="Close dashboard menu"
-          onClick={closeMobileMenu}
-          className="fixed inset-0 z-40 bg-slate-950/40 md:hidden"
-        />
-      )}
-
       {/* Sidebar */}
       <aside
         id="dashboard-sidebar"
         className={[
-          'fixed inset-y-0 start-0 z-50 flex w-72 flex-col border-e border-slate-200 bg-white shadow-xl transition-all duration-300 dark:border-slate-800 dark:bg-slate-900',
-          'md:sticky md:top-0 md:z-30 md:h-screen',
+          'sticky top-0 z-30 flex h-screen flex-col border-e border-slate-200 bg-white shadow-xl transition-all duration-300 dark:border-slate-800 dark:bg-slate-900',
           sidebarWidth,
-          mobileOpen
-            ? 'translate-x-0'
-            : '-translate-x-full rtl:translate-x-full md:translate-x-0 md:rtl:translate-x-0',
         ].join(' ')}
         aria-label="Dashboard navigation"
       >
@@ -435,18 +265,6 @@ export default function DashboardSidebar() {
             </button>
           )}
 
-          {/* Mobile close button */}
-          <button
-            type="button"
-            onClick={() => {
-              setMobileOpen(false);
-              setCollapsed(false);
-            }}
-            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:hover:bg-slate-800 dark:hover:text-slate-200 md:hidden"
-            aria-label="Close dashboard menu"
-          >
-            <X className="h-5 w-5" />
-          </button>
         </div>
 
         {/* User */}
@@ -490,7 +308,6 @@ export default function DashboardSidebar() {
             <AdminNav
               isSuperAdmin={isSuperAdmin}
               showLabels={showLabels}
-              onNavigate={closeMobileMenu}
             />
           ) : isStaff ? (
             <div className="space-y-1">
@@ -514,7 +331,6 @@ export default function DashboardSidebar() {
                   <Link
                     key={item.label}
                     to={item.to}
-                    onClick={closeMobileMenu}
                     title={!showLabels ? item.label : undefined}
                     aria-current={active ? 'page' : undefined}
                     className={[
@@ -552,7 +368,6 @@ export default function DashboardSidebar() {
             <button
               type="button"
               onClick={() => {
-                closeMobileMenu();
                 navigate(staffPreview ? '/admin' : '/staff');
               }}
               title={!showLabels ? (staffPreview ? 'Back to admin' : 'Open staff view') : undefined}
@@ -572,7 +387,6 @@ export default function DashboardSidebar() {
           {!adminView && (
             <NavLink
               to="/settings"
-              onClick={closeMobileMenu}
               title={!showLabels ? 'Settings' : undefined}
               className={({ isActive }) =>
                 [
@@ -613,7 +427,7 @@ export default function DashboardSidebar() {
               setCollapsed((value) => !value)
             }
             className={[
-              'hidden items-center justify-center rounded-xl border border-slate-200 py-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 md:flex',
+              'flex items-center justify-center rounded-xl border border-slate-200 py-2 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 dark:border-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200',
               actionsInRow ? 'shrink-0 px-2' : 'mt-2 w-full',
             ].join(' ')}
             aria-label={

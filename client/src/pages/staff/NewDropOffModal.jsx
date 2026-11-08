@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useBranch } from '../../context/BranchContext.jsx';
-import { priceLabel, todayISO } from './shared.jsx';
+import { useCurrency } from '../../context/CurrencyContext.jsx';
+import { todayISO } from './shared.jsx';
 
 function itemPrice(item) {
   return item.unit_price != null ? Number(item.unit_price) : Number(item.price_min);
@@ -20,6 +21,7 @@ function itemPrice(item) {
 // actually brought the items in, e.g. a friend or family member).
 export function NewDropOffModal({ onClose, onCreated }) {
   const { currentBranchId } = useBranch();
+  const { formatPrice, formatItemPrice } = useCurrency();
   const [items, setItems] = useState([]);
   const [zones, setZones] = useState([]);
   const [itemSearch, setItemSearch] = useState('');
@@ -119,8 +121,8 @@ export function NewDropOffModal({ onClose, onCreated }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8">
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-xl dark:bg-slate-800">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center sm:px-4 sm:py-8">
+      <div className="flex max-h-[94dvh] w-full max-w-3xl flex-col rounded-t-3xl bg-white shadow-xl dark:bg-slate-800 sm:max-h-[90vh] sm:rounded-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 dark:border-slate-700">
           <div>
             <h2 className="font-display text-lg font-semibold text-ink-900 dark:text-white">New Drop-off</h2>
@@ -269,7 +271,7 @@ export function NewDropOffModal({ onClose, onCreated }) {
                         <div key={item.id} className="flex items-center justify-between gap-3 py-2">
                           <div>
                             <p className="text-sm font-medium text-ink-900 dark:text-white">{item.item_name}</p>
-                            <p className="text-xs text-slate-400">{priceLabel(item)}</p>
+                            <p className="text-xs text-slate-400">{formatItemPrice(item)}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
@@ -300,7 +302,7 @@ export function NewDropOffModal({ onClose, onCreated }) {
             {cartLines.length > 0 && (
               <div className="mt-2 flex justify-between text-sm">
                 <span className="text-slate-500 dark:text-slate-400">{cartLines.reduce((n, l) => n + l.quantity, 0)} item(s)</span>
-                <span className="font-semibold text-brand-600">GHS {cartTotal.toFixed(2)}</span>
+                <span className="font-semibold text-brand-600">{formatPrice(cartTotal)}</span>
               </div>
             )}
           </div>

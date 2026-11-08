@@ -45,6 +45,38 @@ describe('AuthProvider', () => {
     expect(localStorage.getItem('mll_token')).toBeNull();
   });
 
+  it('keeps the saved token when the server cannot be reached', async () => {
+    localStorage.setItem('mll_token', 'saved');
+    api.get.mockRejectedValue(new Error('Network Error'));
+    renderProvider();
+    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('signed out'));
+    expect(localStorage.getItem('mll_token')).toBe('saved');
+    expect(auth.connectionError).toBe(true);
+  });
+
+  it('keeps the saved token through a server error', async () => {
+    localStorage.setItem('mll_token', 'saved');
+    api.get.mockRejectedValue({ response: { status: 503 } });
+    renderProvider();
+    await waitFor(() => expect(auth.connectionError).toBe(true));
+    expect(localStorage.getItem('mll_token')).toBe('saved');
+  });
+
+  it('restores the person by itself once the connection returns', async () => {
+    localStorage.setItem('mll_token', 'saved');
+    api.get.mockRejectedValueOnce(new Error('Network Error'));
+    renderProvider();
+    await waitFor(() => expect(auth.connectionError).toBe(true));
+
+    api.get.mockResolvedValue({ data: { user: ama } });
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('ama@example.com'));
+    expect(auth.connectionError).toBe(false);
+  });
+
   it('logs in: saves the token and the person', async () => {
     api.post.mockResolvedValue({ data: { token: 'new-token', user: ama } });
     renderProvider();

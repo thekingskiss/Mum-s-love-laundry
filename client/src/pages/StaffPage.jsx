@@ -104,7 +104,7 @@ export function Workspace({ area }) {
   }, [requestedTab, canOpenRequestedTab, staffPreview, isSuperAdmin]);
 
    return (
-    <div className="w-full px-4 pb-16 pt-6 sm:px-6 md:px-0 md:pt-2">
+    <div className="w-full px-4 pb-8 pt-3 sm:px-6 md:px-0 md:pb-16 md:pt-2">
       {staffPreview && (
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 dark:border-violet-900 dark:bg-violet-950/30">
           <p className="text-sm text-violet-900 dark:text-violet-200">
@@ -120,18 +120,18 @@ export function Workspace({ area }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-3xl font-semibold text-ink-900 dark:text-white">
+            <h1 className="font-display text-2xl font-semibold text-ink-900 dark:text-white sm:text-3xl">
               {TABS.find((item) => item.key === tab).label}
             </h1>
 
             {isAdmin && (
-              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+              <span className="hidden rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300 md:inline">
                 {STAFF_ROLE_LABELS[user.role]}
               </span>
             )}
           </div>
 
-          <p className="mt-2 text-slate-500 dark:text-slate-400">
+          <p className="mt-2 hidden text-slate-500 dark:text-slate-400 md:block">
             Signed in as {user.full_name} {'\u00B7'}{' '}
             {STAFF_ROLE_LABELS[user.role] || user.role}
           </p>
@@ -144,7 +144,7 @@ export function Workspace({ area }) {
               setCurrentBranchId(e.target.value)
             }
             title="Filter the Dashboard, Order Queue, Scheduled Pickups, Invoices, Payments, and Analytics tabs by branch"
-            className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 shadow-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 shadow-sm outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 sm:w-auto"
           >
             <option value="">All Branches</option>
 
@@ -157,7 +157,7 @@ export function Workspace({ area }) {
         )}
       </div>
 
-      <div className="mt-8">
+      <div className="mt-5 sm:mt-8">
 
         <div className="min-w-0 flex-1">
           <AnimatePresence mode="wait">

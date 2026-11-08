@@ -326,15 +326,19 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleGeneralPreference(field, value, applyLocal) {
+  async function handleGeneralPreference(field, value, applyLocal, previous) {
+    // Apply right away so the change is visible even if the save is slow or
+    // fails; roll back to the previous value if the server rejects it.
+    const optimistic = previous !== undefined;
+    if (optimistic) applyLocal(value);
     try {
       await updateProfile({
         [field]: value,
       });
-
-      applyLocal(value);
-      toast.success('Preference saved.');
+      if (!optimistic) applyLocal(value);
+      toast.success(optimistic ? t('settings_saved') : 'Preference saved.');
     } catch (err) {
+      if (optimistic) applyLocal(previous);
       toast.error(
         err.response?.data?.error || 'Unable to save that preference.'
       );
@@ -928,7 +932,7 @@ export default function SettingsPage() {
                   {/* Language */}
                   <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
                     <label htmlFor="settings-language" className="text-[11px] font-medium text-slate-400">
-                      Language
+                      {t('settings_language')}
                     </label>
 
                     <select id="settings-language"
@@ -937,7 +941,8 @@ export default function SettingsPage() {
                         handleGeneralPreference(
                           'preferred_language',
                           e.target.value,
-                          setLang
+                          setLang,
+                          lang
                         )
                       }
                       className="mt-2 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
@@ -965,7 +970,8 @@ export default function SettingsPage() {
                         handleGeneralPreference(
                           'preferred_currency',
                           e.target.value,
-                          setCurrencyCode
+                          setCurrencyCode,
+                          currencyCode
                         )
                       }
                       className="mt-2 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs text-slate-900 outline-none focus:border-red-400 dark:border-slate-700 dark:bg-slate-950 dark:text-white"

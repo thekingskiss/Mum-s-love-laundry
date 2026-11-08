@@ -60,7 +60,7 @@ export default function Navbar() {
   }, [profileOpen]);
 
   return (
-    <header className="sticky top-0 z-50 bg-white shadow-sm dark:bg-ink-900 dark:shadow-none dark:border-b dark:border-slate-800">
+    <header className="sticky top-0 z-50 bg-white pt-[env(safe-area-inset-top)] shadow-sm dark:bg-ink-900 dark:shadow-none dark:border-b dark:border-slate-800">
       {/* Utility bar */}
       <div className="hidden border-b border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 md:block">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-2 text-xs text-slate-500 dark:text-slate-400">
@@ -81,7 +81,7 @@ export default function Navbar() {
       </div>
 
       {/* Main nav */}
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 md:py-4">
         <Link to="/" className="flex items-center">
           <img src={mllLogo} alt="Mum's Love Laundry" className="h-10 w-auto" />
         </Link>
@@ -189,12 +189,13 @@ export default function Navbar() {
           </Link>
         </div>
 
-        <div className="flex items-center gap-3 md:hidden">
+        <div className="flex items-center gap-2 md:hidden">
           {user && <NotificationBell />}
           <button
-            className="text-slate-700 dark:text-slate-200"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
             onClick={() => setOpen((o) => !o)}
             aria-label="Toggle navigation menu"
+            aria-expanded={open}
           >
             {open ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -210,7 +211,7 @@ export default function Navbar() {
             transition={{ duration: 0.25, ease: 'easeOut' }}
             className="overflow-hidden border-t border-slate-100 bg-white dark:border-slate-800 dark:bg-ink-900 md:hidden"
           >
-          <div className="flex flex-col gap-4 px-6 py-4">
+          <div className="flex flex-col px-4 pb-4 pt-2 sm:px-6 [&>a]:flex [&>a]:min-h-12 [&>a]:items-center [&>button]:min-h-12 [&>button]:items-center">
             {!isStaff && (
               <>
                 <NavLink to="/" className={navLinkClass} end onClick={() => setOpen(false)}>
@@ -251,7 +252,7 @@ export default function Navbar() {
                 {t('nav_settings')}
               </NavLink>
             )}
-            <hr className="border-slate-100 dark:border-slate-800" />
+            <hr className="my-1 border-slate-100 dark:border-slate-800" />
             <button
               onClick={handleToggleTheme}
               className="flex items-center gap-2.5 text-start text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300"
@@ -270,7 +271,7 @@ export default function Navbar() {
                 </Link>
                 <Link
                   to="/register"
-                  className="rounded-full bg-brand-500 px-4 py-2 text-center text-xs font-bold uppercase tracking-widest text-white"
+                  className="mt-2 !justify-center rounded-full bg-brand-500 px-4 py-3 text-center text-xs font-bold uppercase tracking-widest text-white"
                   onClick={() => setOpen(false)}
                 >
                   {t('nav_signup')}

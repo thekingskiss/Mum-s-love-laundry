@@ -101,6 +101,52 @@ Log out and back in (JWTs carry the role at issue-time). From there, use
 `laundry_staff` and `administrator` accounts through the UI. Only a
 `super_admin` can create accounts.
 
+## Mobile app (installable PWA)
+
+The client is an installable progressive web app, so customers, staff and
+admins can use it from their phone's home screen like a native app, on Android
+and iPhone, with no app store.
+
+**What phones get**
+
+- **App-style navigation** below 768px: a slim top bar (brand, notifications,
+  account) and a bottom tab bar per role, with a **More** sheet for everything
+  else. Customers: Home, Orders, a raised **Book** button, Payments. Staff:
+  Home, Orders, Customers, Messages. Admins: Overview, Orders, Messages,
+  Payments, with unread-message / overdue-pickup / low-stock counts as badges.
+  Wider screens keep the sidebar. Both read from `client/src/lib/dashboardNav.js`,
+  so a page added there appears in both.
+- **Touch-first details**: 44px tap targets, 16px form fields (stops iOS zooming
+  into inputs), safe-area padding for notches and the home indicator, `dvh`
+  heights, modals that slide up as bottom sheets, and data tables that turn into
+  labelled cards (add `table-cards` to a `<table>`; labels come from its header).
+- **Install**: a dismissible install banner (Android/Chrome one-tap; iPhone shows
+  the Share → Add to Home Screen steps) plus an *Install app* row in the More
+  sheet. Dismissing hides it for 14 days.
+- **Offline and flaky networks**: the app shell and every file already loaded are
+  cached by `client/public/sw.js`, so the installed app opens instantly and shows
+  an offline notice instead of a blank page. A saved login survives a failed
+  check (offline, or the server down), so people are not signed out on a bad
+  connection; the app retries by itself when the connection returns.
+- **Updates**: each `vite build` stamps a new id into `sw.js`; installed apps
+  notice a new release and offer an *Update* button.
+
+**What is never cached**: anything under `/api/` or `/uploads/`. Orders, balances
+and profiles always come from the network, so nobody sees stale or someone
+else's data.
+
+**Hosting requirements**: serve over HTTPS (service workers and installing need
+it; `localhost` is exempt), and rewrite unknown paths to `index.html` as for any
+single-page app. `sw.js` and `manifest.webmanifest` must be served from the site
+root. Avoid long cache lifetimes on `sw.js` itself.
+
+The service worker only registers in production builds. To try it locally:
+`cd client && npm run build && npm run preview`, then open the preview URL.
+
+**Icons** live in `client/public/icons/` and are generated from the brand mark by
+`client/scripts/generate-pwa-icons.mjs` (needs `npm install --no-save sharp`);
+the PNGs are committed, so this only matters if the mark changes.
+
 ## Roles
 
 | Role              | Can do                                                              |

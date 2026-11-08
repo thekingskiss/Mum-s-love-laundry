@@ -8,7 +8,10 @@ import ProtectedRoute from './components/ProtectedRoute.jsx';
 import HomeRoute from './components/HomeRoute.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import ToastContainer from './components/ToastContainer.jsx';
+import InstallPrompt from './components/InstallPrompt.jsx';
+import PwaStatus from './components/PwaStatus.jsx';
 import { ADMIN_ROLES, STAFF_ROLES } from './lib/roles';
+import { useTableCardLabels } from './lib/tableCards.js';
 
 // Every page except the home page is loaded on demand, so a visitor to the
 // marketing site doesn't download the staff and admin workspaces (the biggest
@@ -50,6 +53,7 @@ function PageFallback() {
 
 export default function App() {
   const location = useLocation();
+  useTableCardLabels();
 
   const isDashboardRoute =
     location.pathname === '/dashboard' ||
@@ -59,9 +63,11 @@ export default function App() {
     location.pathname === '/admin';
 
   return (
-    <div className="min-h-screen bg-white text-ink-900 dark:bg-ink-900 dark:text-slate-100">
+    <div className="min-h-dvh bg-white text-ink-900 dark:bg-ink-900 dark:text-slate-100">
       <ScrollToTop />
       <ToastContainer />
+      <PwaStatus aboveTabBar={isDashboardRoute} />
+      <InstallPrompt aboveTabBar={isDashboardRoute} />
 
       {!isDashboardRoute && <Navbar />}
 
