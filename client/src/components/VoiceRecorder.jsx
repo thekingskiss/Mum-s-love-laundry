@@ -67,7 +67,10 @@ export default function VoiceRecorder({ onRecorded, disabled }) {
         release();
         setRecording(false);
         if (!chunks.length) return;
-        const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+        // Digits only, e.g. 202611081324. Don't list the separators in a bracket
+        // pattern here: Tailwind's class scanner reads that as an arbitrary-property
+        // class and emits a junk CSS rule (and a build warning).
+        const stamp = new Date().toISOString().slice(0, 16).replace(/\D/g, '');
         const file = new File([new Blob(chunks, { type: choice.type })], `voice-note-${stamp}.${choice.ext}`, {
           type: choice.type,
         });
