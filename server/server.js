@@ -66,7 +66,12 @@ app.use(express.json({ limit: '100kb', verify: (req, res, buf) => { req.rawBody 
 app.use(
   '/uploads',
   express.static(path.join(__dirname, 'uploads'), {
-    setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
+    setHeaders: (res) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      // Message attachments are staff-supplied files; never let a browser guess
+      // a different (scriptable) type for them.
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    },
   })
 );
 

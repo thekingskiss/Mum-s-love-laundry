@@ -100,7 +100,7 @@ export function CustomersTab() {
                   )}
                   {detail && detail.orders.length > 0 && (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
+                      <table className="table-cards w-full text-left text-sm">
                         <thead className="text-xs uppercase tracking-wide text-slate-400">
                           <tr>
                             <th className="px-3 py-2 font-medium">Items</th>

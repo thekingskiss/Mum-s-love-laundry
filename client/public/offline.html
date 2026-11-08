@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#eb1c1c" />
+    <title>You're offline | Mum's Love Laundry</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+        font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+        text-align: center;
+      }
+      main { max-width: 22rem; }
+      .mark {
+        width: 72px; height: 72px; margin: 0 auto 24px;
+        border-radius: 20px; background: #eb1c1c; color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font: 700 36px Georgia, serif;
+      }
+      h1 { margin: 0 0 8px; font-size: 1.5rem; }
+      p { margin: 0 0 24px; line-height: 1.5; color: #475569; }
+      button {
+        min-height: 48px; padding: 0 28px; border: 0; border-radius: 12px;
+        background: #eb1c1c; color: #fff; font: 600 1rem inherit; cursor: pointer;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #020617; color: #f1f5f9; }
+        p { color: #94a3b8; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">M</div>
+      <h1>You're offline</h1>
+      <p>
+        Mum's Love Laundry can't reach the internet right now. Check your connection and try again.
+        Your orders are safe.
+      </p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+    <script>
+      // Come back automatically as soon as the connection does.
+      window.addEventListener('online', function () { location.reload(); });
+    </script>
+  </body>
+</html>

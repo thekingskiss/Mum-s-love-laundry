@@ -125,7 +125,7 @@ export function InventoryTab() {
             <h3 className="text-xs font-bold uppercase tracking-widest text-brand-600">{category}</h3>
             <div className="mt-3 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-soft dark:border-slate-700 dark:bg-slate-800">
               <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table className="table-cards w-full text-left text-sm">
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {categoryItems.map((item) => (
                     <tr key={item.id} className={item.is_active ? '' : 'opacity-50'}>

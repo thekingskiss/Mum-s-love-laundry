@@ -52,9 +52,21 @@ export function CurrencyProvider({ children }) {
     [active]
   );
 
+  // Price-list label for a catalogue item: a fixed price, or a min–max range.
+  const formatItemPrice = useCallback(
+    (item) => {
+      if (item.unit_price != null) return formatPrice(item.unit_price);
+      const rate = Number(active.rate_to_ghs);
+      const min = (Number(item.price_min) || 0) * rate;
+      const max = (Number(item.price_max) || 0) * rate;
+      return `${active.symbol} ${min.toFixed(2)} – ${max.toFixed(2)}`;
+    },
+    [active, formatPrice]
+  );
+
   const value = useMemo(
-    () => ({ currencies, code, setCode, active, formatPrice }),
-    [currencies, code, active, formatPrice]
+    () => ({ currencies, code, setCode, active, formatPrice, formatItemPrice }),
+    [currencies, code, active, formatPrice, formatItemPrice]
   );
 
   return <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>;

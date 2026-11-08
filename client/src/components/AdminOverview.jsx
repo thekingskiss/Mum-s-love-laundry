@@ -422,7 +422,7 @@ function BranchComparison({ branches, formatPrice }) {
     <section className={`${PANEL} mt-4 overflow-hidden`}>
       <h3 className="px-5 pt-5 font-semibold text-ink-900 dark:text-white">Branch comparison</h3>
       <div className="relative mt-3 overflow-x-auto">
-        <table className="w-full text-left text-sm">
+        <table className="table-cards w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400">
             <tr>
               <th className="px-5 py-3 font-medium">Branch</th>

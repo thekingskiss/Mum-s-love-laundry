@@ -28,9 +28,11 @@ import {
   suggestPaymentType,
 } from '../../lib/payments';
 import { NewDropOffModal } from './NewDropOffModal.jsx';
+import { useCurrency } from '../../context/CurrencyContext.jsx';
 
 export function OrderQueueTab({ user }) {
   const navigate = useNavigate();
+  const { formatPrice } = useCurrency();
   const toast = useToast();
   const { currentBranchId } = useBranch();
   const [orders, setOrders] = useState([]);
@@ -363,7 +365,7 @@ export function OrderQueueTab({ user }) {
                 </div>
                 <div className="flex items-center gap-3">
                   <StatusPill status={order.status} />
-                  <span className="font-semibold text-brand-600">GHS {Number(order.total_price).toFixed(2)}</span>
+                  <span className="font-semibold text-brand-600">{formatPrice(order.total_price)}</span>
                   <Link
                     to={`/orders/${order.id}/receipt`}
                     className="text-slate-400 transition hover:text-brand-600"
@@ -378,12 +380,12 @@ export function OrderQueueTab({ user }) {
                 <PaymentStatusPill status={order.payment_status} />
                 {order.balance_due > 0 && (
                   <span className="text-xs font-semibold text-slate-500">
-                    Balance due: GHS {Number(order.balance_due).toFixed(2)}
+                    Balance due: {formatPrice(order.balance_due)}
                   </span>
                 )}
                 {order.discount_amount > 0 && (
                   <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                    🎂 Birthday discount: −GHS {Number(order.discount_amount).toFixed(2)}
+                    🎂 Birthday discount: −{formatPrice(order.discount_amount)}
                   </span>
                 )}
                 {order.storage_location && (
@@ -400,8 +402,8 @@ export function OrderQueueTab({ user }) {
                   className="mt-3 flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs font-semibold text-amber-700"
                 >
                   <AlertTriangle size={14} /> {order.days_overdue} day{order.days_overdue === 1 ? '' : 's'} overdue —
-                  GHS {order.late_fee.toFixed(2)} storage fee accrued
-                  {order.late_fee_paid > 0 && ` (GHS ${order.late_fee_due.toFixed(2)} still due)`}
+                  {formatPrice(order.late_fee)} storage fee accrued
+                  {order.late_fee_paid > 0 && ` (${formatPrice(order.late_fee_due)} still due)`}
                 </motion.div>
               )}
 
@@ -528,7 +530,7 @@ export function OrderQueueTab({ user }) {
                           {p.recorded_by_name && <span className="text-slate-400"> · by {p.recorded_by_name}</span>}
                         </span>
                         <span className={`font-semibold ${p.payment_type === 'refund' ? 'text-red-600' : 'text-green-600'}`}>
-                          {p.payment_type === 'refund' ? '-' : '+'}GHS {Number(p.amount).toFixed(2)}
+                          {p.payment_type === 'refund' ? '-' : '+'}{formatPrice(p.amount)}
                         </span>
                       </li>
                     ))}

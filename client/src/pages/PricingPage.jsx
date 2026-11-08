@@ -6,13 +6,10 @@ import { Search } from 'lucide-react';
 import api from '../api/axios';
 import SectionHeading from '../components/SectionHeading.jsx';
 import ScrollReveal from '../components/ScrollReveal.jsx';
-
-function priceLabel(item) {
-  if (item.unit_price != null) return `GHS ${Number(item.unit_price).toFixed(2)}`;
-  return `GHS ${Number(item.price_min).toFixed(2)} – ${Number(item.price_max).toFixed(2)}`;
-}
+import { useCurrency } from '../context/CurrencyContext.jsx';
 
 export default function PricingPage() {
+  const { formatItemPrice } = useCurrency();
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
 
@@ -74,7 +71,7 @@ export default function PricingPage() {
                     {categoryItems.map((item) => (
                       <tr key={item.id}>
                         <td className="px-6 py-2.5 text-slate-700">{item.item_name}</td>
-                        <td className="px-6 py-2.5 text-right font-semibold text-brand-600">{priceLabel(item)}</td>
+                        <td className="px-6 py-2.5 text-right font-semibold text-brand-600">{formatItemPrice(item)}</td>
                       </tr>
                     ))}
                   </tbody>

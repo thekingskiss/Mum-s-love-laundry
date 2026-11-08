@@ -48,6 +48,18 @@ export function ThemeProvider({ children }) {
     const root = document.documentElement;
     root.classList.toggle('dark', isDarkTheme(resolvedTheme));
     root.dataset.theme = resolvedTheme;
+
+    // Colour the phone's status bar / installed-app title bar to match the theme.
+    const surface = THEMES.find((item) => item.id === resolvedTheme)?.swatch.surface;
+    if (surface) {
+      let meta = document.querySelector('meta[name="theme-color"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = 'theme-color';
+        document.head.appendChild(meta);
+      }
+      meta.content = surface;
+    }
   }, [resolvedTheme]);
 
   useEffect(() => {

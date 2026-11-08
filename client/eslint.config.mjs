@@ -36,7 +36,7 @@ export default [
     rules: { 'react/display-name': 'off' },
   },
   {
-    files: ['*.config.js', '*.config.mjs'],
+    files: ['*.config.js', '*.config.mjs', 'scripts/**/*.mjs'],
     languageOptions: { globals: { ...globals.node } },
   },
 ];

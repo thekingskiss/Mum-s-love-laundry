@@ -41,6 +41,7 @@ const {
   sendInvoice,
 } = require('../controllers/invoiceController');
 const { requireAuth, requireAdmin, requireStaff, requireRole } = require('../middleware/auth');
+const { messageUploads } = require('../middleware/upload');
 const requireSuperAdmin = requireRole('super_admin');
 
 const router = express.Router();
@@ -154,6 +155,7 @@ router.post('/balance-reminders/run', requireAuth, requireAdmin, runBalanceDueRe
 router.post('/invoice-reminders/run', requireAuth, requireAdmin, runInvoiceRemindersNow);
 
 // Admin-authored message to one customer (customer_id) or broadcast to all — administrators only.
-router.post('/messages', requireAuth, requireAdmin, messageLimiter, sendMessage);
+// Accepts JSON, or multipart/form-data with up to 5 `attachments` files.
+router.post('/messages', requireAuth, requireAdmin, messageLimiter, messageUploads, sendMessage);
 
 module.exports = router;

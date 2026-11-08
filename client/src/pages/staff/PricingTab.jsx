@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/axios';
+import { useCurrency } from '../../context/CurrencyContext.jsx';
 import { useToast } from '../../context/ToastContext.jsx';
 import { priceLabel } from './shared.jsx';
 
@@ -100,6 +101,7 @@ function PriceItemFields({ draft, onChange }) {
 // server refuses their changes regardless.
 export function PricingTab({ canEdit }) {
   const toast = useToast();
+  const { formatItemPrice } = useCurrency();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -310,7 +312,8 @@ export function PricingTab({ canEdit }) {
                           )}
                         </td>
                         <td className={`px-4 py-2.5 text-slate-700 dark:text-slate-200 ${item.unit_price != null ? 'whitespace-nowrap' : 'sm:whitespace-nowrap'}`}>
-                          {priceLabel(item)}
+                          {/* Editors work in GHS, the currency prices are stored in; everyone else sees their chosen currency. */}
+                          {canEdit ? priceLabel(item) : formatItemPrice(item)}
                         </td>
                         {canEdit && (
                           <td className="px-4 py-2.5">

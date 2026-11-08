@@ -4,6 +4,7 @@ dist/
 .DS_Store
 server/uploads/avatars/*
 !server/uploads/avatars/.gitkeep
+server/uploads/messages/*
 *.log
 .claude/
 Microsoft/
