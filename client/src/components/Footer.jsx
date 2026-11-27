@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Facebook, Instagram, Mail, MapPin, Phone, X } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext.jsx';
@@ -5,6 +6,77 @@ import { SHOP_ADDRESS, SHOP_EMAIL, SHOP_PHONE } from '../lib/shopInfo.js';
 import mllLogo from '../assets/mll-logo.png';
 
 const SOCIALS = [Facebook, Instagram, X];
+
+const CONTACTS = [
+  { key: 'address', label: 'address', Icon: MapPin, text: SHOP_ADDRESS },
+  { key: 'phone', label: 'phone number', Icon: Phone, text: SHOP_PHONE, href: `tel:${SHOP_PHONE.replace(/[^\d+]/g, '')}` },
+  { key: 'email', label: 'email', Icon: Mail, text: SHOP_EMAIL, href: `mailto:${SHOP_EMAIL}` },
+];
+
+// Only the icons show. Tapping one reveals that detail alone; tapping anywhere
+// else on the page (or pressing Escape) puts it away again.
+function ContactIcons() {
+  const [openKey, setOpenKey] = useState(null);
+
+  useEffect(() => {
+    if (!openKey) return undefined;
+    // Closing waits a tick so a tap on the phone or email link still follows it.
+    const close = (event) => {
+      if (event.target.closest?.('[data-contact-toggle]')) return;
+      setTimeout(() => setOpenKey(null), 0);
+    };
+    const onKey = (event) => event.key === 'Escape' && setOpenKey(null);
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [openKey]);
+
+  const open = CONTACTS.find((c) => c.key === openKey);
+
+  return (
+    <div className="mt-2 md:mt-4">
+      <div className="flex gap-2 md:gap-3">
+        {CONTACTS.map(({ key, label, Icon }) => {
+          const active = key === openKey;
+          return (
+            <button
+              key={key}
+              type="button"
+              data-contact-toggle
+              aria-label={`Show our ${label}`}
+              aria-expanded={active}
+              aria-controls="footer-contact-detail"
+              onClick={() => setOpenKey(active ? null : key)}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 ${
+                active
+                  ? 'border-brand-500 bg-brand-500 text-white'
+                  : 'border-slate-200 text-brand-500 hover:border-brand-400 dark:border-slate-700'
+              }`}
+            >
+              <Icon size={17} />
+            </button>
+          );
+        })}
+      </div>
+      <div id="footer-contact-detail" aria-live="polite" className="text-xs md:text-sm">
+        {open && (
+          <p className="mt-3 rounded-lg bg-white px-3 py-2 text-slate-700 shadow-sm dark:bg-slate-800 dark:text-slate-200">
+            {open.href ? (
+              <a href={open.href} className="font-medium hover:text-brand-600">
+                {open.text}
+              </a>
+            ) : (
+              open.text
+            )}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function Footer() {
   const { t } = useLanguage();
@@ -51,11 +123,7 @@ export default function Footer() {
 
         <div className="col-span-2 md:col-span-1">
           <h4 className="font-display text-base text-ink-900 dark:text-white md:text-lg">{t('footer_contact_info')}</h4>
-          <ul className="mt-2 space-y-1.5 text-xs md:mt-4 md:space-y-3 md:text-sm">
-            <li className="flex items-start gap-2"><MapPin size={16} className="mt-0.5 shrink-0 text-brand-500" /> {SHOP_ADDRESS}</li>
-            <li className="flex items-start gap-2"><Phone size={16} className="mt-0.5 shrink-0 text-brand-500" /> {SHOP_PHONE}</li>
-            <li className="flex items-start gap-2"><Mail size={16} className="mt-0.5 shrink-0 text-brand-500" /> {SHOP_EMAIL}</li>
-          </ul>
+          <ContactIcons />
         </div>
       </div>
       <div className="flex flex-col items-center gap-1 border-t border-slate-200 px-5 py-3 text-center text-[11px] md:gap-2 md:py-6 md:text-xs text-slate-400 dark:border-slate-800 sm:flex-row sm:justify-between sm:px-6">
