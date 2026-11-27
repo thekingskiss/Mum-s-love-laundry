@@ -212,8 +212,8 @@ export default function LandingPage() {
       </p>
     </ScrollReveal>
 
-    {/* Two cards a row: 1 and 2 on the first line, 3 and 4 on the second. */}
-    <div className="mt-14 grid grid-cols-2 gap-4 sm:gap-6">
+    {/* Two cards a row on phones and tablets (1 and 2, then 3 and 4); all four on one line from desktop width. */}
+    <div className="mt-14 grid grid-cols-2 gap-4 sm:gap-6 lg:grid-cols-4 lg:gap-5">
       {REASONS.map((r, i) => (
         <ScrollReveal key={r.title} delay={i * 0.1}>
           <motion.article
@@ -222,7 +222,7 @@ export default function LandingPage() {
             className="group h-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl dark:border-slate-700 dark:bg-slate-800"
           >
             {/* Image */}
-            <div className="relative h-36 overflow-hidden sm:h-56">
+            <div className="relative h-36 overflow-hidden sm:h-56 lg:h-44">
               <img
                 src={r.image}
                 alt={r.title}
@@ -231,7 +231,7 @@ export default function LandingPage() {
 
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
 
-              <div className="absolute bottom-4 left-5">
+              <div className="absolute bottom-4 left-5 lg:bottom-3 lg:left-4">
                 <span className="rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-brand-600 backdrop-blur-sm">
                   0{i + 1}
                 </span>
@@ -239,20 +239,20 @@ export default function LandingPage() {
             </div>
 
             {/* Content */}
-            <div className="p-4 sm:p-7">
+            <div className="p-4 sm:p-7 lg:p-5">
               <div className="mb-3 h-1 w-10 rounded-full bg-brand-500 transition-all duration-300 group-hover:w-16 sm:mb-4" />
 
-              <h3 className="font-display text-lg text-ink-900 dark:text-white sm:text-2xl">
+              <h3 className="font-display text-lg text-ink-900 dark:text-white sm:text-2xl lg:text-xl">
                 {r.title}
               </h3>
 
-              <p className="mt-3 text-xs leading-6 text-slate-500 dark:text-slate-400 sm:mt-4 sm:text-sm sm:leading-7">
+              <p className="mt-3 text-xs leading-6 text-slate-500 dark:text-slate-400 sm:mt-4 sm:text-sm sm:leading-7 lg:mt-3">
                 {r.desc}
               </p>
 
               <Link
                 to="/services"
-                className="mt-4 inline-flex items-center text-[10px] font-bold uppercase tracking-widest text-brand-600 transition-colors hover:text-brand-700 dark:text-brand-400 sm:mt-6 sm:text-xs"
+                className="mt-4 inline-flex items-center text-[10px] font-bold uppercase tracking-widest text-brand-600 transition-colors hover:text-brand-700 dark:text-brand-400 sm:mt-6 sm:text-xs lg:mt-4 lg:text-[10px] lg:tracking-wider"
               >
                 Explore our services
                 <span className="ml-2 transition-transform duration-300 group-hover:translate-x-1">
