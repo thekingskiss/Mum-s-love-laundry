@@ -22,7 +22,7 @@ test('a visitor opens the chat, asks about opening hours, and is asked to log in
   await expect(conversation(page)).toContainText(/I.m Mum.s Helper/);
 
   await ask(page, 'What are your opening hours?');
-  await expect(conversation(page)).toContainText('Open 7 days a week, 8am');
+  await expect(conversation(page)).toContainText('open 7 days a week, 8am');
 
   await ask(page, 'Track my order');
   await expect(conversation(page)).toContainText('Please log in so I can look up');
@@ -38,7 +38,7 @@ test('a suggested question can be tapped instead of typed', async ({ page }) => 
   await launcher(page).click();
 
   await panel(page).getByRole('group', { name: 'Suggested questions' }).getByRole('button', { name: 'Opening hours' }).click();
-  await expect(conversation(page)).toContainText('Open 7 days a week, 8am');
+  await expect(conversation(page)).toContainText('open 7 days a week, 8am');
 });
 
 test('a signed-in customer is looked up by their own account, not asked to log in', async ({ browser }) => {
