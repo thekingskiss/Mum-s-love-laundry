@@ -6,5 +6,6 @@ const SHOP_NAME = "Mum's Love Laundry";
 const SHOP_ADDRESS = 'Akuapem-Akropong, Opposite Old Police Station, Eastern Region, Ghana';
 const SHOP_PHONE = '+233244980843';
 const SHOP_EMAIL = 'hello@mumslovelaundry.com';
+const SHOP_HOURS = 'Open 7 days a week, 8am – 8pm';
 
-module.exports = { SHOP_NAME, SHOP_ADDRESS, SHOP_PHONE, SHOP_EMAIL };
+module.exports = { SHOP_NAME, SHOP_ADDRESS, SHOP_PHONE, SHOP_EMAIL, SHOP_HOURS };

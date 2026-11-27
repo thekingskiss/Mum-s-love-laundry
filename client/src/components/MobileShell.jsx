@@ -66,7 +66,7 @@ function AppBar({ user, nav, onOpenMenu }) {
           className="flex min-w-0 items-center gap-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
           aria-label="Mum's Love Laundry home"
         >
-          <img src="/icons/icon-192.png" alt="" width="32" height="32" className="h-8 w-8 shrink-0 rounded-lg" />
+          <img src={`${import.meta.env.BASE_URL}icons/icon-192.png`} alt="" width="32" height="32" className="h-8 w-8 shrink-0 rounded-lg" />
           <span className="min-w-0">
             <span className="block truncate font-display text-base font-bold leading-tight text-ink-900 dark:text-white">
               Mum's Love

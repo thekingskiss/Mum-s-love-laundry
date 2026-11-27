@@ -5,6 +5,7 @@ const pool = require('../config/db');
 const { storeAvatar, deleteAvatar } = require('../services/avatarStorage');
 const { isZoneSupported, getActiveZoneNames } = require('../utils/zones');
 const { sendEmail } = require('../services/notify');
+const { CLIENT_URL } = require('../config/clientUrl');
 
 const SALT_ROUNDS = 12;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -395,8 +396,7 @@ async function forgotPassword(req, res, next) {
       user.id,
     ]);
 
-    const clientOrigin = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',')[0].trim();
-    const resetLink = `${clientOrigin}/reset-password?token=${rawToken}`;
+    const resetLink = `${CLIENT_URL}/reset-password?token=${rawToken}`;
 
     const sent = await sendEmail(
       user.email,

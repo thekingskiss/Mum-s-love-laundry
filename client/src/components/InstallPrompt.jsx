@@ -67,7 +67,7 @@ export default function InstallPrompt({ aboveTabBar = false }) {
           ].join(' ')}
         >
           <div className="flex items-start gap-3">
-            <img src="/icons/icon-192.png" alt="" width="44" height="44" className="h-11 w-11 shrink-0 rounded-xl" />
+            <img src={`${import.meta.env.BASE_URL}icons/icon-192.png`} alt="" width="44" height="44" className="h-11 w-11 shrink-0 rounded-xl" />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-slate-900 dark:text-white">Install Mum's Love</p>
               <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">

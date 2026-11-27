@@ -13,18 +13,20 @@
  * vite.config.js), which is what makes browsers notice a new version.
  */
 const BUILD = '__BUILD_ID__';
+// Where the site lives: '/' on its own domain, '/repo-name/' on GitHub Pages.
+const BASE = new URL('./', self.location).pathname;
 const SHELL_CACHE = `mll-shell-${BUILD}`;
 const ASSET_CACHE = 'mll-assets-v1';
 const MAX_ASSETS = 120;
 const NAVIGATION_TIMEOUT_MS = 6000;
 
 const PRECACHE = [
-  '/',
-  '/offline.html',
-  '/manifest.webmanifest',
-  '/favicon.png',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  BASE,
+  `${BASE}offline.html`,
+  `${BASE}manifest.webmanifest`,
+  `${BASE}favicon.png`,
+  `${BASE}icons/icon-192.png`,
+  `${BASE}icons/icon-512.png`,
 ];
 
 self.addEventListener('install', (event) => {
@@ -63,8 +65,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   // Other origins (the API in development, fonts, payment pages) are the browser's business.
   if (url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/')) return;
-  if (url.pathname === '/sw.js') return;
+  if (url.pathname.startsWith(`${BASE}api/`) || url.pathname.startsWith(`${BASE}uploads/`)) return;
+  if (url.pathname === `${BASE}sw.js`) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(handleNavigation(request));
@@ -72,7 +74,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Vite names built files by content hash, so a cached copy is never out of date.
-  if (url.pathname.startsWith('/assets/')) {
+  if (url.pathname.startsWith(`${BASE}assets/`)) {
     event.respondWith(cacheFirst(request));
     return;
   }
@@ -82,7 +84,7 @@ self.addEventListener('fetch', (event) => {
 
 async function handleNavigation(request) {
   const cache = await caches.open(SHELL_CACHE);
-  const cached = await cache.match('/');
+  const cached = await cache.match(BASE);
 
   try {
     // With a cached shell to fall back on, don't make the person wait on a bad connection.
@@ -93,10 +95,10 @@ async function handleNavigation(request) {
 
     const isHtml = (response.headers.get('content-type') || '').includes('text/html');
     // Every route serves the same single-page shell, so one copy covers them all.
-    if (response.ok && isHtml) cache.put('/', response.clone());
+    if (response.ok && isHtml) cache.put(BASE, response.clone());
     return response;
   } catch {
-    return cached || (await cache.match('/offline.html')) || Response.error();
+    return cached || (await cache.match(`${BASE}offline.html`)) || Response.error();
   }
 }
 
