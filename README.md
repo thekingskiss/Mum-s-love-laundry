@@ -116,8 +116,10 @@ Do these in order (the API address is needed before the site is built):
 
 1. **Database**: create a Supabase project and copy its *Session pooler* URI.
 2. **API**: on Render choose New -> Blueprint, pick this repo, and paste the
-   `DATABASE_URL` (and Cloudinary keys; Render's disk is wiped on every deploy,
-   so avatars and attachments need Cloudinary). The start command runs
+   `DATABASE_URL` and the three Cloudinary keys. The API **refuses to start**
+   in production without the Cloudinary keys (a free Cloudinary account is
+   enough; Render's disk is wiped on every deploy, so avatars and attachments
+   live there). The start command runs
    `npm run db:migrate` first. Note the URL Render gives you, for example
    `https://mums-love-laundry-api.onrender.com`. Check `render.yaml`: its
    `CLIENT_ORIGIN` and `CLIENT_URL` must match your GitHub user and repo name.
@@ -127,6 +129,9 @@ Do these in order (the API address is needed before the site is built):
    slash).
 4. Push to `main` (or run the workflow by hand from the Actions tab). The site
    appears at `https://<user>.github.io/<repo>/`.
+5. **First admin**: register on the live site, then in Supabase open the SQL
+   Editor and run `UPDATE users SET role = 'super_admin' WHERE email = 'you@example.com';`
+   (your own email). Log out and back in so the new role takes effect.
 
 The site is built for the sub-path `/<repo>/` by passing `VITE_BASE_PATH`; on a
 domain of its own leave that unset. `CLIENT_ORIGIN` (CORS, origin only) and

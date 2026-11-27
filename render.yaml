@@ -24,6 +24,7 @@ services:
       # Full address of the site, used in emailed and payment links.
       - key: CLIENT_URL
         value: https://thekingskiss.github.io/Mum-s-love-laundry
+      # Required in production: the API exits at startup without all three.
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
