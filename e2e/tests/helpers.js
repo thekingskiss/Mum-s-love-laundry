@@ -4,8 +4,10 @@ import { PASSWORD } from '../env.js';
 // Signs in through the real login form and waits for the landing page.
 export async function logIn(page, user, { password = PASSWORD, landing } = {}) {
   await page.goto('/login');
-  await page.getByLabel('Email').fill(user.email);
-  await page.getByLabel('Password').fill(password);
+  // Exact, because every page's footer has a "Show our email" button, and a
+  // plain 'Email' would match that label as well as the sign-in field.
+  await page.getByLabel('Email', { exact: true }).fill(user.email);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Log In' }).click();
   if (landing) await expect(page).toHaveURL(landing);
 }
