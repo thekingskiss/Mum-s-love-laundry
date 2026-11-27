@@ -86,7 +86,7 @@ export default function ContactPage() {
         </div>
       </section>
 
-      <section className="border-y border-slate-100 bg-white py-16">
+      <section className="border-y border-slate-100 bg-white/85 py-16">
         <div className="mx-auto max-w-xl px-6">
           <h3 className="text-center font-display text-2xl text-ink-900">Send Us a Message</h3>
           <p className="mt-1 text-center text-sm text-slate-500">

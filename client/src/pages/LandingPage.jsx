@@ -12,6 +12,7 @@ import heroBackground from '../assets/clean-clothes.jpg';
 import washingMachinesCloseup from '../assets/washing-machines-closeup.jpg';
 import foldedKnits from '../assets/folded-knits.jpg';
 import laundryBasket from '../assets/laundry-basket.jpg';
+import ironingBoard from '../assets/ironing-board.jpg';
 
 const MotionLink = motion(Link);
 
@@ -30,6 +31,11 @@ const REASONS = [
     image: foldedKnits,
     title: 'Excellent Results',
     desc: 'We provide high quality washing, ironing, and dry cleaning from trusted facilities, and take custom orders so your clothes look and feel their best.',
+  },
+  {
+    image: ironingBoard,
+    title: 'Careful Ironing',
+    desc: 'Every garment is pressed and folded by hand, so your clothes come back crisp, neat and ready to wear.',
   },
 ];
 
@@ -191,7 +197,7 @@ export default function LandingPage() {
       </section>
 
       {/* Reasons to choose us */}
-<section className="bg-slate-50 py-24 dark:bg-slate-900/60">
+<section className="bg-slate-50/85 py-24 dark:bg-slate-900/60">
   <div className="mx-auto max-w-7xl px-6 lg:px-8">
 
     <ScrollReveal>
@@ -206,17 +212,17 @@ export default function LandingPage() {
       </p>
     </ScrollReveal>
 
-    {/* Three across at every width; the cards shrink to fit. */}
-    <div className="mt-10 grid grid-cols-3 gap-2 sm:mt-14 sm:gap-4 lg:gap-6">
+    {/* Two cards a row: 1 and 2 on the first line, 3 and 4 on the second. */}
+    <div className="mt-14 grid grid-cols-2 gap-4 sm:gap-6">
       {REASONS.map((r, i) => (
         <ScrollReveal key={r.title} delay={i * 0.1}>
           <motion.article
-            whileHover={{ y: -4 }}
+            whileHover={{ y: -8 }}
             transition={{ duration: 0.3, ease: 'easeOut' }}
-            className="group h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl dark:border-slate-700 dark:bg-slate-800 sm:rounded-2xl"
+            className="group h-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl dark:border-slate-700 dark:bg-slate-800"
           >
             {/* Image */}
-            <div className="relative h-24 overflow-hidden sm:h-36 lg:h-44">
+            <div className="relative h-36 overflow-hidden sm:h-56">
               <img
                 src={r.image}
                 alt={r.title}
@@ -225,33 +231,31 @@ export default function LandingPage() {
 
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
 
-              <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3">
-                <span className="rounded-full bg-white/90 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-brand-600 backdrop-blur-sm sm:px-2.5 sm:py-1 sm:text-[10px]">
+              <div className="absolute bottom-4 left-5">
+                <span className="rounded-full bg-white/90 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-brand-600 backdrop-blur-sm">
                   0{i + 1}
                 </span>
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-2 sm:p-4 lg:p-5">
-              <div className="mb-2 h-0.5 w-6 rounded-full bg-brand-500 transition-all duration-300 group-hover:w-10 sm:mb-3 sm:h-1 sm:w-8 sm:group-hover:w-12" />
+            <div className="p-4 sm:p-7">
+              <div className="mb-3 h-1 w-10 rounded-full bg-brand-500 transition-all duration-300 group-hover:w-16 sm:mb-4" />
 
-              <h3 className="font-display text-[11px] leading-tight text-ink-900 hyphens-auto break-words dark:text-white min-[400px]:text-[13px] sm:text-lg lg:text-xl">
+              <h3 className="font-display text-lg text-ink-900 dark:text-white sm:text-2xl">
                 {r.title}
               </h3>
 
-              {/* Too long to read at phone width, so it appears from tablet up. */}
-              <p className="mt-2 hidden text-xs leading-6 text-slate-500 dark:text-slate-400 sm:block lg:text-sm lg:leading-7">
+              <p className="mt-3 text-xs leading-6 text-slate-500 dark:text-slate-400 sm:mt-4 sm:text-sm sm:leading-7">
                 {r.desc}
               </p>
 
               <Link
                 to="/services"
-                className="mt-2 inline-flex items-center text-[9px] font-bold uppercase tracking-wider text-brand-600 transition-colors hover:text-brand-700 dark:text-brand-400 sm:mt-4 sm:text-[11px] sm:tracking-widest"
+                className="mt-4 inline-flex items-center text-[10px] font-bold uppercase tracking-widest text-brand-600 transition-colors hover:text-brand-700 dark:text-brand-400 sm:mt-6 sm:text-xs"
               >
-                <span className="sm:hidden">Explore</span>
-                <span className="hidden sm:inline">Explore our services</span>
-                <span className="ml-1 transition-transform duration-300 group-hover:translate-x-1 sm:ml-2">
+                Explore our services
+                <span className="ml-2 transition-transform duration-300 group-hover:translate-x-1">
                   →
                 </span>
               </Link>
