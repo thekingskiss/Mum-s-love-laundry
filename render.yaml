@@ -1,0 +1,32 @@
+# Render blueprint for the API (the website itself goes to GitHub Pages).
+# Render dashboard -> New -> Blueprint -> pick this repo. Values marked
+# `sync: false` are asked for on first deploy, so no secret is stored in git.
+services:
+  - type: web
+    name: mums-love-laundry-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm ci
+    # Applies any new database migrations, then starts the API.
+    startCommand: npm run db:migrate && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL # Supabase "Session pooler" URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      # Origin only, no path: this is the CORS allow-list.
+      - key: CLIENT_ORIGIN
+        value: https://thekingskiss.github.io
+      # Full address of the site, used in emailed and payment links.
+      - key: CLIENT_URL
+        value: https://thekingskiss.github.io/Mum-s-love-laundry
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false

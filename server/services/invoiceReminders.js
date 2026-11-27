@@ -3,7 +3,7 @@ const { runWithJobLock } = require('./jobLock');
 const { notifyUser } = require('./notify');
 const { NET_PAID_EXPR } = require('../controllers/paymentController');
 
-const CLIENT_ORIGIN = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',')[0].trim();
+const { CLIENT_URL } = require('../config/clientUrl');
 
 // A nudge the day an invoice falls due, then a weekly follow-up for as long
 // as it stays unpaid past that — mirrors the cadence balanceDueReminders.js
@@ -41,7 +41,7 @@ async function runInvoiceRemindersUnlocked() {
     const daysPastDue = Math.floor((Date.now() - new Date(invoice.due_date).getTime()) / (1000 * 60 * 60 * 24));
     if (!isInvoiceReminderDue(daysPastDue)) continue;
 
-    const link = `${CLIENT_ORIGIN}/pay/invoice/${invoice.public_token}`;
+    const link = `${CLIENT_URL}/pay/invoice/${invoice.public_token}`;
     const statusWord = daysPastDue > 0 ? 'overdue' : 'due today';
     await notifyUser(invoice.user_id, {
       type: 'invoice_reminder',

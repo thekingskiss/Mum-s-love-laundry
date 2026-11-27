@@ -30,6 +30,9 @@ function serviceWorkerBuildId() {
 }
 
 export default defineConfig({
+  // '/' on a domain of its own. GitHub Pages serves a project site from a
+  // sub-path ('/repo-name/'), which the deploy workflow passes in here.
+  base: process.env.VITE_BASE_PATH || '/',
   plugins: [react(), serviceWorkerBuildId()],
   // Keep the development origin aligned with the API's default CORS origin
   // and the setup instructions. Fail clearly if another process owns it.

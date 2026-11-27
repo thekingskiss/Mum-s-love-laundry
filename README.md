@@ -101,6 +101,40 @@ Log out and back in (JWTs carry the role at issue-time). From there, use
 `laundry_staff` and `administrator` accounts through the UI. Only a
 `super_admin` can create accounts.
 
+## Hosting (GitHub Pages + Render + Supabase)
+
+GitHub Pages only serves static files, so it hosts the website (`client/`). The
+API and the database run elsewhere, all on free tiers:
+
+| Part | Where | Set up by |
+| --- | --- | --- |
+| Website | GitHub Pages | `.github/workflows/deploy-pages.yml` |
+| API | Render | `render.yaml` (Blueprint) |
+| Database | Supabase PostgreSQL | see Setup above |
+
+Do these in order (the API address is needed before the site is built):
+
+1. **Database**: create a Supabase project and copy its *Session pooler* URI.
+2. **API**: on Render choose New -> Blueprint, pick this repo, and paste the
+   `DATABASE_URL` (and Cloudinary keys; Render's disk is wiped on every deploy,
+   so avatars and attachments need Cloudinary). The start command runs
+   `npm run db:migrate` first. Note the URL Render gives you, for example
+   `https://mums-love-laundry-api.onrender.com`. Check `render.yaml`: its
+   `CLIENT_ORIGIN` and `CLIENT_URL` must match your GitHub user and repo name.
+3. **Website**: in the repo go to Settings -> Pages and set Source to
+   **GitHub Actions**. Then Settings -> Secrets and variables -> Actions ->
+   **Variables** and add `VITE_API_BASE_URL` with the Render URL (no trailing
+   slash).
+4. Push to `main` (or run the workflow by hand from the Actions tab). The site
+   appears at `https://<user>.github.io/<repo>/`.
+
+The site is built for the sub-path `/<repo>/` by passing `VITE_BASE_PATH`; on a
+domain of its own leave that unset. `CLIENT_ORIGIN` (CORS, origin only) and
+`CLIENT_URL` (full address, used in reset and payment links) are separate on
+purpose. The free Render service sleeps when idle, so the first request after a
+quiet spell takes about a minute; it also does not run `worker.js` (the daily
+reminder jobs), which needs a paid background worker.
+
 ## Mobile app (installable PWA)
 
 The client is an installable progressive web app, so customers, staff and

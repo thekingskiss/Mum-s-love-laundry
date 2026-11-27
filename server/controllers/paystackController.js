@@ -5,7 +5,7 @@ const { canViewOrder } = require('../utils/branchAccess');
 const { NET_PAID_EXPR } = require('./paymentController');
 const paystack = require('../services/paystack');
 
-const CLIENT_ORIGIN = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',')[0].trim();
+const { CLIENT_URL } = require('../config/clientUrl');
 const CHARGE_PAYMENT_TYPES = ['deposit', 'partial', 'balance', 'full'];
 
 function mapChannelToMethod(channel) {
@@ -62,7 +62,7 @@ async function initializePayment(req, res, next) {
       email: order.email,
       amountPesewas: Math.round(amountNum * 100),
       reference,
-      callbackUrl: `${CLIENT_ORIGIN}/payments/callback`,
+      callbackUrl: `${CLIENT_URL}/payments/callback`,
       metadata: { order_id: order.id, payment_type: type, initiated_by: req.user.id },
     });
 

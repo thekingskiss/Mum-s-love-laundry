@@ -114,7 +114,7 @@ export function registerServiceWorker() {
   window.addEventListener('load', async () => {
     let registration;
     try {
-      registration = await navigator.serviceWorker.register('/sw.js');
+      registration = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
     } catch {
       return;
     }

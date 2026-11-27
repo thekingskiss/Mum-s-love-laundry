@@ -8,7 +8,7 @@ const { finalizePaystackPayment } = require('./paystackController');
 const paystack = require('../services/paystack');
 const { renderInvoicePdf } = require('../services/invoicePdf');
 
-const CLIENT_ORIGIN = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',')[0].trim();
+const { CLIENT_URL } = require('../config/clientUrl');
 const ADJUSTMENT_KINDS = ['discount', 'fee', 'tax'];
 
 // Balance/status are always derived live from the same payments ledger
@@ -542,7 +542,7 @@ async function sendInvoice(req, res, next) {
     }
 
     const balance = Math.max(Number(invoice.total_amount) - Number(invoice.net_paid), 0);
-    const link = `${CLIENT_ORIGIN}/pay/invoice/${invoice.public_token}`;
+    const link = `${CLIENT_URL}/pay/invoice/${invoice.public_token}`;
     const dueDateStr = new Date(invoice.due_date).toISOString().slice(0, 10);
     const body =
       balance > 0
@@ -734,7 +734,7 @@ async function initPublicPayment(req, res, next) {
       email: invoice.email,
       amountPesewas: Math.round(amountNum * 100),
       reference,
-      callbackUrl: `${CLIENT_ORIGIN}/pay/invoice/${token}`,
+      callbackUrl: `${CLIENT_URL}/pay/invoice/${token}`,
       metadata: { order_id: invoice.order_id, payment_type: 'partial', invoice_id: invoice.id, initiated_by: null },
     });
 
