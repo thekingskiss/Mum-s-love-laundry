@@ -60,7 +60,7 @@ function AppBar({ user, nav, onOpenMenu }) {
   // block of the bell's fixed dropdown and trap the panel inside the bar.
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white pt-[env(safe-area-inset-top)] dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex h-14 items-center gap-3 px-4">
+      <div className="flex h-12 items-center gap-3 px-4">
         <Link
           to={nav.home}
           className="flex min-w-0 items-center gap-2.5 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"

@@ -12,6 +12,7 @@ import heroBackground from '../assets/clean-clothes.jpg';
 import washingMachinesCloseup from '../assets/washing-machines-closeup.jpg';
 import foldedKnits from '../assets/folded-knits.jpg';
 import laundryBasket from '../assets/laundry-basket.jpg';
+import ironingBoard from '../assets/ironing-board.jpg';
 
 const MotionLink = motion(Link);
 
@@ -30,6 +31,11 @@ const REASONS = [
     image: foldedKnits,
     title: 'Excellent Results',
     desc: 'We provide high quality washing, ironing, and dry cleaning from trusted facilities, and take custom orders so your clothes look and feel their best.',
+  },
+  {
+    image: ironingBoard,
+    title: 'Careful Ironing',
+    desc: 'Every garment is pressed and folded by hand, so your clothes come back crisp, neat and ready to wear.',
   },
 ];
 
@@ -191,7 +197,7 @@ export default function LandingPage() {
       </section>
 
       {/* Reasons to choose us */}
-<section className="bg-slate-50 py-24 dark:bg-slate-900/60">
+<section className="bg-slate-50/85 py-24 dark:bg-slate-900/60">
   <div className="mx-auto max-w-7xl px-6 lg:px-8">
 
     <ScrollReveal>
@@ -206,7 +212,8 @@ export default function LandingPage() {
       </p>
     </ScrollReveal>
 
-    <div className="mt-14 grid grid-cols-1 gap-6 md:grid-cols-3">
+    {/* Two cards a row: 1 and 2 on the first line, 3 and 4 on the second. */}
+    <div className="mt-14 grid grid-cols-2 gap-4 sm:gap-6">
       {REASONS.map((r, i) => (
         <ScrollReveal key={r.title} delay={i * 0.1}>
           <motion.article
@@ -215,7 +222,7 @@ export default function LandingPage() {
             className="group h-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow duration-300 hover:shadow-xl dark:border-slate-700 dark:bg-slate-800"
           >
             {/* Image */}
-            <div className="relative h-56 overflow-hidden">
+            <div className="relative h-36 overflow-hidden sm:h-56">
               <img
                 src={r.image}
                 alt={r.title}
@@ -232,20 +239,20 @@ export default function LandingPage() {
             </div>
 
             {/* Content */}
-            <div className="p-7">
-              <div className="mb-4 h-1 w-10 rounded-full bg-brand-500 transition-all duration-300 group-hover:w-16" />
+            <div className="p-4 sm:p-7">
+              <div className="mb-3 h-1 w-10 rounded-full bg-brand-500 transition-all duration-300 group-hover:w-16 sm:mb-4" />
 
-              <h3 className="font-display text-2xl text-ink-900 dark:text-white">
+              <h3 className="font-display text-lg text-ink-900 dark:text-white sm:text-2xl">
                 {r.title}
               </h3>
 
-              <p className="mt-4 text-sm leading-7 text-slate-500 dark:text-slate-400">
+              <p className="mt-3 text-xs leading-6 text-slate-500 dark:text-slate-400 sm:mt-4 sm:text-sm sm:leading-7">
                 {r.desc}
               </p>
 
               <Link
                 to="/services"
-                className="mt-6 inline-flex items-center text-xs font-bold uppercase tracking-widest text-brand-600 transition-colors hover:text-brand-700 dark:text-brand-400"
+                className="mt-4 inline-flex items-center text-[10px] font-bold uppercase tracking-widest text-brand-600 transition-colors hover:text-brand-700 dark:text-brand-400 sm:mt-6 sm:text-xs"
               >
                 Explore our services
                 <span className="ml-2 transition-transform duration-300 group-hover:translate-x-1">

@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
 import Footer from './components/Footer.jsx';
+import BackgroundCarousel from './components/BackgroundCarousel.jsx';
 import DashboardLayout from './components/DashboardLayout.jsx';
 import ScrollToTop from './components/ScrollToTop.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
@@ -66,7 +67,10 @@ export default function App() {
     location.pathname === '/admin';
 
   return (
-    <div className="min-h-dvh bg-white text-ink-900 dark:bg-ink-900 dark:text-slate-100">
+    // `isolate` makes this div its own stacking context, so the carousel's
+    // negative z-index lands above this background but under all the content.
+    <div className="relative isolate min-h-dvh bg-white text-ink-900 dark:bg-ink-900 dark:text-slate-100">
+      <BackgroundCarousel />
       <ScrollToTop />
       <ToastContainer />
       <PwaStatus aboveTabBar={isDashboardRoute} />

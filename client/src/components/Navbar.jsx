@@ -81,9 +81,9 @@ export default function Navbar() {
       </div>
 
       {/* Main nav */}
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 md:py-4">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-1 sm:px-6 sm:py-2 md:py-4">
         <Link to="/" className="flex items-center">
-          <img src={mllLogo} alt="Mum's Love Laundry" className="h-10 w-auto" />
+          <img src={mllLogo} alt="Mum's Love Laundry" className="h-8 w-auto md:h-10" />
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex">
@@ -192,7 +192,7 @@ export default function Navbar() {
         <div className="flex items-center gap-2 md:hidden">
           {user && <NotificationBell />}
           <button
-            className="flex h-11 w-11 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
             onClick={() => setOpen((o) => !o)}
             aria-label="Toggle navigation menu"
             aria-expanded={open}

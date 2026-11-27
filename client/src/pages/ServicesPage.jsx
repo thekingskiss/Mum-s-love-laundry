@@ -67,7 +67,7 @@ export default function ServicesPage() {
       </section>
 
       {/* Service offerings */}
-      <section className="bg-slate-50 py-24 dark:bg-slate-900">
+      <section className="bg-slate-50/85 py-24 dark:bg-slate-900/85">
         <div className="mx-auto max-w-7xl px-6 text-center">
           <ScrollReveal>
             <SectionHeading title="What We Offer" eyebrow="Our Services" />
