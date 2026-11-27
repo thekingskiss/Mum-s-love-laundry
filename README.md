@@ -421,6 +421,35 @@ a running record an admin can add to and delete from.
 | GET    | `/api/invoices/public/:token`      | Token       | View an invoice from its pay link, no login.   |
 | POST   | `/api/invoices/public/:token/pay`  | Token       | Start an online payment from the pay link.     |
 | GET    | `/api/invoices/public/:token/verify/:reference` | Token | Confirm a pay-link payment.          |
+| POST   | `/api/chat`                        | Public (JWT optional) | Ask the chat assistant a question (see below). |
+
+## Chat assistant ("Mum's Helper")
+
+A chat button sits at the bottom-right of the public pages and the customer
+dashboard. It is full-screen on phones and a card on larger screens, follows
+the dark theme, and keeps the conversation for the browser tab only.
+
+It is a rule-based assistant, deliberately **not** backed by an outside AI
+service: there is no API key to set up, no per-message cost, and it can only
+say things the shop has actually configured. It answers from live data:
+
+- prices (`laundry_items`, `services`, including active promos), opening hours,
+  address/branches, how booking and payments work, the late-fee policy;
+- for a signed-in customer, their **own** orders (status, expected date,
+  storage shelf, balance, late fee). The query is always scoped to the
+  token's user id, and a visitor is asked to log in instead.
+
+Anything it can't answer offers the shop's phone, WhatsApp and the Contact page.
+
+- `server/services/chatbot.js` — the question rules and replies (pure; add a
+  new topic by adding a rule to `RULES` and a reply). Shop facts come from
+  `server/config/shopInfo.js` and the policy constants in `server/utils/`.
+- `server/controllers/chatController.js`, `server/routes/chatRoutes.js` —
+  `POST /api/chat` with a `message` of at most 500 characters, rate-limited to
+  30 a minute per IP. A request with a bad token is refused rather than treated
+  as a visitor.
+- `client/src/components/ChatWidget.jsx` — the widget; `HIDDEN_PREFIXES` lists
+  the pages it stays off (workspaces, booking wizard, receipts, payments).
 
 ## Notifications
 

@@ -16,6 +16,7 @@ const itemRoutes = require('./routes/itemRoutes');
 const currencyRoutes = require('./routes/currencyRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 const paystackRoutes = require('./routes/paystackRoutes');
+const chatRoutes = require('./routes/chatRoutes');
 const invoiceRoutes = require('./routes/invoiceRoutes');
 const branchRoutes = require('./routes/branchRoutes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
@@ -109,6 +110,7 @@ app.use('/api/items', itemRoutes);
 app.use('/api/currencies', currencyRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/paystack', paystackRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/branches', branchRoutes);
 

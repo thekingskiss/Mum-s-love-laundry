@@ -13,6 +13,9 @@ import PwaStatus from './components/PwaStatus.jsx';
 import { ADMIN_ROLES, STAFF_ROLES } from './lib/roles';
 import { useTableCardLabels } from './lib/tableCards.js';
 
+// The chat assistant isn't needed for the first paint, so it loads just after.
+const ChatWidget = lazy(() => import('./components/ChatWidget.jsx'));
+
 // Every page except the home page is loaded on demand, so a visitor to the
 // marketing site doesn't download the staff and admin workspaces (the biggest
 // code in the app) up front.
@@ -68,6 +71,9 @@ export default function App() {
       <ToastContainer />
       <PwaStatus aboveTabBar={isDashboardRoute} />
       <InstallPrompt aboveTabBar={isDashboardRoute} />
+      <Suspense fallback={null}>
+        <ChatWidget />
+      </Suspense>
 
       {!isDashboardRoute && <Navbar />}
 
